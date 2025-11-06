@@ -5,7 +5,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from io import StringIO
 from dotenv import load_dotenv
 
-# CORRECT FIX: Import the Pandas agent creator from the specific toolkits path.
+# THIS IS THE FIXED LINE 4: It uses the correct, stable import path.
 from langchain_experimental.agents.agent_toolkits.pandas.base import create_pandas_dataframe_agent 
 
 # Load environment variables (useful for local testing)
