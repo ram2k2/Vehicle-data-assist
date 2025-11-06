@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import streamlit as st
-from langchain_experimental.agents.agent_toolkits.csv.base import create_csv_agent
+from langchain_experimental.agents import create_csv_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 from io import StringIO
 from dotenv import load_dotenv
