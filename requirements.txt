@@ -1,8 +1,9 @@
-langchain
-langchain-google-genai
+streamlit>=1.20.0
+pandas>=2.0.0
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-community>=0.0.30
+langchain-experimental>=0.0.60
+langchain-google-genai>=1.0.0
 google-genai
-pandas
-streamlit
-langchain-experimental  # Required for create_csv_agent
-langchain-core         # Required for base classes like AgentExecutor
-langchain-community
+python-dotenv
