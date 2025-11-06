@@ -1,27 +1,21 @@
 import os
 import pandas as pd
 import streamlit as st
+from langchain_experimental.agents.agent_toolkits.pandas.base import create_pandas_dataframe_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 from io import StringIO
 from dotenv import load_dotenv
 
-# CORRECT LINE 4: Imports create_pandas_dataframe_agent from the stable, specific path.
-from langchain_experimental.agents.agent_toolkits.pandas.base import create_pandas_dataframe_agent 
-
 # Load environment variables (useful for local testing)
 load_dotenv() 
 
-# --- 1. CONFIGURATION & UI SETUP ---
+# --- 1. CONFIGURATION ---
 MODEL_NAME = "gemini-2.5-flash"
-st.set_page_config(page_title="Free Vehicle Data Agent", layout="wide")
-st.title("🚗 Free Vehicle Data Insights Agent")
-st.write("Upload your CSV file to get instant summaries and accurate insights using the Gemini AI model.")
 
 # --- 2. AGENT CREATION FUNCTION ---
-# This function is cached to prevent redundant object creation
 @st.cache_resource
 def create_agent(df: pd.DataFrame):
-    """Initializes and returns the LangChain Pandas Dataframe Agent."""
+    """Initializes and returns the LangChain Pandas DataFrame Agent."""
     
     # Check for API Key
     api_key = os.getenv("GEMINI_API_KEY")
@@ -29,42 +23,78 @@ def create_agent(df: pd.DataFrame):
         st.error("GEMINI_API_KEY environment variable is not set. Cannot proceed.")
         return None
 
-    # Initialize the Gemini LLM
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=api_key, temperature=0.0)
+    # LLM Initialization
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, 
+        api_key=api_key,
+        # Required to allow the agent to execute code
+        client_options={"allow_dangerous_code": True} 
+    )
     
-    # Use create_pandas_dataframe_agent, which correctly accepts the 'df' object
+    # Custom, highly detailed System Prompt (Suffix) to enforce required behavior
+    SYSTEM_PROMPT_SUFFIX = (
+        "You are an expert **Vehicle Data Analyst** working with data obtained from Data Act access requests. "
+        "Your responses must be **formal, direct, and authoritative**. "
+        "Your primary goal is to help the user understand their vehicle data by analyzing the provided CSV file. "
+        "--- Mandatory Protocol ---\n"
+        "1. **Execution**: You **MUST** generate and run the necessary Python code using pandas to answer questions.\n"
+        "2. **Initial Check**: Immediately state the exact row and column count of the loaded DataFrame.\n"
+        "3. **Summary Command**: When the user requests a 'summary' or 'comprehensive breakdown', follow these steps precisely:\n"
+        "    a. **Data Cleaning**: Handle potential inconsistencies. Convert relevant columns to numeric format (errors='coerce') and drop any rows with missing or invalid data (NV) for the target columns.\n"
+        "    b. **Calculations**:\n"
+        "        - **Total Distance Traveled**: Calculate the difference between the final and initial values in the `Total distance (km)` column.\n"
+        "        - **Average Fuel Efficiency**: Compute the mean of all valid values in the `Fuel efficiency` column.\n"
+        "        - **Latest Battery SOH**: Use the most recent value (last row) from the `High voltage battery State of Health (SOH).` column.\n"
+        "        - **Average Vehicle Speed**: Calculate the mean of the `Current vehicle speed.` column.\n"
+        "    c. **Formatted Response**: Compile the results into a clear, professional summary using **bold formatting** for key results and listing the values with their unit. Use bullet points for separation.\n"
+        "4. **Visualization**: Generate relevant **charts and graphs** (using Matplotlib or similar if needed within the agent's Python execution) to visually represent key data points (e.g., speed distribution, distance over time).\n"
+        "5. **Constraints**: Refrain from making assumptions or providing insights not supported by the data. Acknowledge any data limitations or gaps found.\n"
+    )
+
+    # The LangChain Pandas DataFrame Agent setup
     agent_executor = create_pandas_dataframe_agent(
         llm=llm,
         df=df,  # Pass the DataFrame directly
-        verbose=False, 
+        verbose=False,
         agent_type="openai-tools",
-        # MANDATORY: Allows the LLM to run Python code for data analysis
-        allow_dangerous_code=True, 
         agent_kwargs={
-            "suffix": (
-                "You are an expert Vehicle Data Analyst. "
-                "Your job is to provide concise summaries and accurate insights based on the provided CSV data. "
-                "Always generate and run the necessary Python code using pandas to answer the user's questions. "
-                "Be direct and precise in your final answer."
-            )
+            "suffix": SYSTEM_PROMPT_SUFFIX
         }
     )
     return agent_executor
 
-# --- 3. FILE UPLOAD SECTION ---
+# --- 3. STREAMLIT APP UI ---
+st.set_page_config(page_title="Vehicle Data Analyst", layout="wide")
+st.title("🚗 Vehicle Data Analyst Agent")
+
+# Initial Welcome Message
+if not st.session_state.get("initial_greeting_sent", False):
+    st.markdown("""
+        Hi, welcome! 😊
+        Please upload a CSV file for vehicle data analysis. 
+        **Use the semicolon (`;`) delimiter for parsing the file.**
+    """)
+    st.session_state["initial_greeting_sent"] = True
+
+
+# --- File Upload Section ---
 uploaded_file = st.sidebar.file_uploader("Upload your Vehicle Data CSV", type="csv")
 df = None
 
 if uploaded_file is not None:
-    # Read the uploaded CSV file into a Pandas DataFrame
+    # Read the uploaded CSV file into a Pandas DataFrame using SEMICOLON (;) delimiter
     data = uploaded_file.getvalue().decode("utf-8")
-    df = pd.read_csv(StringIO(data))
-    
-    st.sidebar.success(f"File uploaded successfully: {uploaded_file.name}")
-    st.sidebar.subheader("Data Preview (First 5 rows)")
-    st.sidebar.dataframe(df.head(), use_container_width=True) 
+    # CRITICAL: Added sep=';' to enforce semicolon delimiter
+    try:
+        df = pd.read_csv(StringIO(data), sep=';')
+        st.sidebar.success(f"File uploaded successfully: {uploaded_file.name}")
+        st.sidebar.dataframe(df.head(), use_container_width=True) # Show a preview in the sidebar
+    except Exception as e:
+        st.sidebar.error(f"Error reading CSV with ';' delimiter. Check your file format. Error: {e}")
+        df = None
 
-# --- 4. CHAT INTERFACE ---
+
+# --- Chat Interface Section ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -77,28 +107,33 @@ if df is not None:
     # Create or retrieve the agent
     agent = create_agent(df)
 
-    if agent:
-        # Accept user input
-        if prompt := st.chat_input("Ask about your data (e.g., 'What is the average MPG?')"):
-            # Add user message to history
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+    # Accept user input
+    if prompt := st.chat_input("Ask about your data (e.g., 'Give me a comprehensive summary')"):
+        
+        if agent is None: # Handle case where API key is missing after file upload
+            st.warning("Cannot run analysis. Please ensure your GEMINI_API_KEY is configured.")
+            st.stop()
+            
+        # Add user message to history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-            with st.chat_message("assistant"):
-                with st.spinner("Analyzing data..."):
-                    try:
-                        # Run the agent
-                        response = agent.invoke({"input": prompt})
-                        agent_response = response['output']
-                    except Exception as e:
-                        # Provide user-friendly error feedback
-                        print(f"Agent Execution Error: {e}") 
-                        agent_response = "I encountered an error during analysis. Please check your question or data for issues and try again."
-                
-                st.markdown(agent_response)
-                # Add assistant message to history
-                st.session_state.messages.append({"role": "assistant", "content": agent_response})
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing data..."):
+                try:
+                    # Run the agent
+                    response = agent.invoke({"input": prompt})
+                    agent_response = response['output']
+                except Exception as e:
+                    # Provide helpful debugging in the console while giving the user a clean error
+                    print(f"Agent Execution Error: {e}")
+                    agent_response = "An unexpected error occurred during analysis. Please try simplifying your request or checking the column names."
+            
+            st.markdown(agent_response)
+            # Add assistant message to history
+            st.session_state.messages.append({"role": "assistant", "content": agent_response})
 
 else:
-    st.info("👆 Please upload a CSV file in the sidebar to begin interacting with the agent.")
+    # Use a simpler prompt for the user when waiting for a file
+    pass
