@@ -3,3 +3,4 @@ langchain-google-genai
 google-genai
 pandas
 streamlit
+langchain-experimental
