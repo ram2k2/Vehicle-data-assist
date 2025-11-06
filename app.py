@@ -1,18 +1,20 @@
 import os
 import pandas as pd
 import streamlit as st
+# Correct import for the dataframe agent
 from langchain_experimental.agents.agent_toolkits.pandas.base import create_pandas_dataframe_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 from io import StringIO
 from dotenv import load_dotenv
 
-# Load environment variables (useful for local testing)
+# Load environment variables (for local testing)
 load_dotenv() 
 
 # --- 1. CONFIGURATION ---
 MODEL_NAME = "gemini-2.5-flash"
 
 # --- 2. AGENT CREATION FUNCTION ---
+# The LLM and agent are cached to avoid expensive re-initialization.
 @st.cache_resource
 def create_agent(df: pd.DataFrame):
     """Initializes and returns the LangChain Pandas DataFrame Agent."""
@@ -23,12 +25,10 @@ def create_agent(df: pd.DataFrame):
         st.error("GEMINI_API_KEY environment variable is not set. Cannot proceed.")
         return None
 
-    # LLM Initialization
+    # LLM Initialization (Removed problematic client_options to fix TypeError)
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME, 
-        api_key=api_key,
-        # Required to allow the agent to execute code
-        client_options={"allow_dangerous_code": True} 
+        api_key=api_key
     )
     
     # Custom, highly detailed System Prompt (Suffix) to enforce required behavior
@@ -40,13 +40,13 @@ def create_agent(df: pd.DataFrame):
         "1. **Execution**: You **MUST** generate and run the necessary Python code using pandas to answer questions.\n"
         "2. **Initial Check**: Immediately state the exact row and column count of the loaded DataFrame.\n"
         "3. **Summary Command**: When the user requests a 'summary' or 'comprehensive breakdown', follow these steps precisely:\n"
-        "    a. **Data Cleaning**: Handle potential inconsistencies. Convert relevant columns to numeric format (errors='coerce') and drop any rows with missing or invalid data (NV) for the target columns.\n"
+        "    a. **Data Cleaning**: Handle potential inconsistencies. Locate the columns: `Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, and `Current vehicle speed.`. Convert these columns to numeric format (errors='coerce') and drop any rows with missing or invalid data (NV) for these target columns.\n"
         "    b. **Calculations**:\n"
         "        - **Total Distance Traveled**: Calculate the difference between the final and initial values in the `Total distance (km)` column.\n"
         "        - **Average Fuel Efficiency**: Compute the mean of all valid values in the `Fuel efficiency` column.\n"
         "        - **Latest Battery SOH**: Use the most recent value (last row) from the `High voltage battery State of Health (SOH).` column.\n"
         "        - **Average Vehicle Speed**: Calculate the mean of the `Current vehicle speed.` column.\n"
-        "    c. **Formatted Response**: Compile the results into a clear, professional summary using **bold formatting** for key results and listing the values with their unit. Use bullet points for separation.\n"
+        "    c. **Formatted Response**: Compile the results into a clear, professional summary using bullet points, **bold formatting** for key results, and listing the values with their unit.\n"
         "4. **Visualization**: Generate relevant **charts and graphs** (using Matplotlib or similar if needed within the agent's Python execution) to visually represent key data points (e.g., speed distribution, distance over time).\n"
         "5. **Constraints**: Refrain from making assumptions or providing insights not supported by the data. Acknowledge any data limitations or gaps found.\n"
     )
@@ -126,7 +126,7 @@ if df is not None:
                     response = agent.invoke({"input": prompt})
                     agent_response = response['output']
                 except Exception as e:
-                    # Provide helpful debugging in the console while giving the user a clean error
+                    # Log the detailed error for debugging purposes
                     print(f"Agent Execution Error: {e}")
                     agent_response = "An unexpected error occurred during analysis. Please try simplifying your request or checking the column names."
             
