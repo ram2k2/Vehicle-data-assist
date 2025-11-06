@@ -3,4 +3,6 @@ langchain-google-genai
 google-genai
 pandas
 streamlit
-langchain-experimental
+langchain-experimental  # Required for create_csv_agent
+langchain-core         # Required for base classes like AgentExecutor
+langchain-community
