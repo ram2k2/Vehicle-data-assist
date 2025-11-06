@@ -1,36 +1,46 @@
 import os
 import pandas as pd
 import streamlit as st
-from langchain_experimental.agents import create_csv_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 from io import StringIO
 from dotenv import load_dotenv
 
-# Load environment variables (useful for local testing, Streamlit handles keys in production)
+# --- FIX: Use create_pandas_dataframe_agent for robustness ---
+# This is the most reliable function when your data is already in a pandas DataFrame.
+from langchain_experimental.agents.agent_toolkits.pandas.base import create_pandas_dataframe_agent 
+
+# Load environment variables (useful for local testing)
 load_dotenv() 
 
-# --- 1. CONFIGURATION ---
+# --- 1. CONFIGURATION & UI SETUP ---
 MODEL_NAME = "gemini-2.5-flash"
+st.set_page_config(page_title="Free Vehicle Data Agent", layout="wide")
+st.title("🚗 Free Vehicle Data Insights Agent")
+st.write("Upload your CSV file to get instant summaries and accurate insights using the Gemini AI model.")
 
 # --- 2. AGENT CREATION FUNCTION ---
-# This function is cached to avoid recreating the agent/LLM on every user interaction
+# This function is cached to prevent redundant object creation
 @st.cache_resource
 def create_agent(df: pd.DataFrame):
-    """Initializes and returns the LangChain CSV Agent."""
-    # Ensure GEMINI_API_KEY is available in the environment (set in Streamlit Secrets)
+    """Initializes and returns the LangChain Pandas Dataframe Agent."""
+    
+    # Check for API Key
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        st.error("GEMINI_API_KEY environment variable not set. Cannot run the agent.")
+        st.error("GEMINI_API_KEY environment variable is not set. Cannot proceed.")
         return None
 
-    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=api_key)
+    # Initialize the Gemini LLM
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=api_key, temperature=0.0)
     
-    # The LangChain CSV Agent setup
-    agent_executor = create_csv_agent(
+    # FIX: Use create_pandas_dataframe_agent and pass 'df'
+    agent_executor = create_pandas_dataframe_agent(
         llm=llm,
-        path=df,  # Pass the DataFrame directly to the agent
-        verbose=False,
+        df=df,  # Pass the DataFrame directly
+        verbose=False, 
         agent_type="openai-tools",
+        # MANDATORY: Allows the LLM to run Python code for data analysis
+        allow_dangerous_code=True, 
         agent_kwargs={
             "suffix": (
                 "You are an expert Vehicle Data Analyst. "
@@ -42,12 +52,7 @@ def create_agent(df: pd.DataFrame):
     )
     return agent_executor
 
-# --- 3. STREAMLIT APP UI ---
-st.set_page_config(page_title="Free Vehicle Data Agent", layout="wide")
-st.title("🚗 Free Vehicle Data Insights Agent")
-st.write("Upload your CSV file to get instant summaries and insights using the Gemini AI model.")
-
-# --- File Upload Section ---
+# --- 3. FILE UPLOAD SECTION ---
 uploaded_file = st.sidebar.file_uploader("Upload your Vehicle Data CSV", type="csv")
 df = None
 
@@ -57,9 +62,10 @@ if uploaded_file is not None:
     df = pd.read_csv(StringIO(data))
     
     st.sidebar.success(f"File uploaded successfully: {uploaded_file.name}")
-    st.sidebar.dataframe(df.head(), use_container_width=True) # Show a preview in the sidebar
+    st.sidebar.subheader("Data Preview (First 5 rows)")
+    st.sidebar.dataframe(df.head(), use_container_width=True) 
 
-# --- Chat Interface Section ---
+# --- 4. CHAT INTERFACE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -72,25 +78,28 @@ if df is not None:
     # Create or retrieve the agent
     agent = create_agent(df)
 
-    # Accept user input
-    if prompt := st.chat_input("Ask about your data (e.g., 'What is the average speed?')"):
-        # Add user message to history
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    if agent:
+        # Accept user input
+        if prompt := st.chat_input("Ask about your data (e.g., 'What is the average MPG?')"):
+            # Add user message to history
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-        with st.chat_message("assistant"):
-            with st.spinner("Analyzing data..."):
-                try:
-                    # Run the agent
-                    response = agent.invoke({"input": prompt})
-                    agent_response = response['output']
-                except Exception as e:
-                    agent_response = f"An error occurred during analysis: {e}. Please check your data format or try a simpler question."
-            
-            st.markdown(agent_response)
-            # Add assistant message to history
-            st.session_state.messages.append({"role": "assistant", "content": agent_response})
+            with st.chat_message("assistant"):
+                with st.spinner("Analyzing data..."):
+                    try:
+                        # Run the agent
+                        response = agent.invoke({"input": prompt})
+                        agent_response = response['output']
+                    except Exception as e:
+                        # Provide user-friendly error feedback
+                        print(f"Agent Execution Error: {e}") 
+                        agent_response = "I encountered an error during analysis. Please check your question or data for issues and try again."
+                
+                st.markdown(agent_response)
+                # Add assistant message to history
+                st.session_state.messages.append({"role": "assistant", "content": agent_response})
 
 else:
     st.info("👆 Please upload a CSV file in the sidebar to begin interacting with the agent.")
