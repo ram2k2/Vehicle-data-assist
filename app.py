@@ -5,8 +5,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from io import StringIO
 from dotenv import load_dotenv
 
-# --- FIX: Use create_pandas_dataframe_agent for robustness ---
-# This is the most reliable function when your data is already in a pandas DataFrame.
+# CORRECT FIX: Import the Pandas agent creator from the specific toolkits path.
 from langchain_experimental.agents.agent_toolkits.pandas.base import create_pandas_dataframe_agent 
 
 # Load environment variables (useful for local testing)
@@ -33,7 +32,7 @@ def create_agent(df: pd.DataFrame):
     # Initialize the Gemini LLM
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=api_key, temperature=0.0)
     
-    # FIX: Use create_pandas_dataframe_agent and pass 'df'
+    # Use create_pandas_dataframe_agent, which correctly accepts the 'df' object
     agent_executor = create_pandas_dataframe_agent(
         llm=llm,
         df=df,  # Pass the DataFrame directly
