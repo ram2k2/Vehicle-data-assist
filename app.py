@@ -83,7 +83,6 @@ if not st.session_state.get("initial_greeting_sent", False):
     st.markdown("""
         Hi, welcome! 😊
         Please upload a CSV file for vehicle data analysis. 
-        **Use the semicolon (`;`) delimiter for parsing the file.**
     """)
     st.session_state["initial_greeting_sent"] = True
 
