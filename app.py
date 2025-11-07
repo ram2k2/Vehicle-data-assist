@@ -70,7 +70,7 @@ agent_executor = create_pandas_dataframe_agent(
         "suffix": SYSTEM_PROMPT_SUFFIX
     }
 )
-    return agent_executor
+return agent_executor
 
 # --- 3. STREAMLIT APP UI ---
 st.set_page_config(page_title="Vehicle Data Analyst", layout="wide")
