@@ -54,13 +54,24 @@ if uploaded_file is not None:
 
         missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
 
+        # Shared language style rule
+        language_style_rule = """
+Language Style Rule:
+You MUST NOT use technical terms like 'DataFrame', 'pandas', 'data types', 'memory usage', or 'dataset structure' in any response.
+Instead, refer to the data as 'your uploaded file', 'your vehicle data', or 'your data'.
+You MUST NOT include column classifications or data type breakdowns. Focus only on meaningful insights such as:
+- Total distance traveled
+- Fuel efficiency
+- Battery health
+- Vehicle speed
+- Trends and averages
+This rule applies to ALL responses, including summaries, diagnostics, and follow-up questions.
+"""
+
         if missing:
-            # Fallback prompt if required columns are missing
-            fallback_suffix = """
+            fallback_suffix = f"""
 You are a professional Vehicle Data Analyst. Your job is to analyze vehicle data and provide structured, actionable insights.
 Always communicate in a clear, professional, and user-friendly tone.
-Avoid using technical terms like 'DataFrame', 'pandas', or 'dataset structure'. Refer to the data as 'your uploaded file', 'your vehicle data', or 'your data'.
-Do not include data types, memory usage, or column classifications in summaries. Focus only on meaningful insights such as trends, averages, latest readings, and performance indicators.
 If the expected columns (`Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, `Current vehicle speed.`) are missing, automatically identify the most relevant numeric columns that reflect vehicle performance, health, or efficiency.
 Use pandas to clean and convert those columns to numeric format (errors='coerce'), drop rows with missing or invalid values, and compute meaningful metrics such as average values, latest readings, or trends.
 Format the output as Markdown:
@@ -73,16 +84,20 @@ Format the output as Markdown:
 
 Note: Provide a brief insight based on the selected metrics.
 Always run Python code to generate this summary.
+{language_style_rule}
 """
             agent = create_agent(df, fallback_suffix)
         else:
-            # Standard prompt when required columns are present
-            standard_suffix = """
+            standard_suffix = f"""
 You are a professional Vehicle Data Analyst. Your job is to analyze vehicle data and provide structured, actionable insights.
 You MUST use Python code with pandas to answer questions. DO NOT use df.describe(), df.info(), or generic summaries.
-Always communicate in a clear, professional, and user-friendly tone. 
-Avoid using technical terms like 'DataFrame', 'pandas', or 'dataset structure'. Refer to the data as 'your uploaded file', 'your vehicle data', or 'your data'.
-Do not include data types, memory usage, or column classifications in summaries. Focus only on meaningful insights such as trends, averages, latest readings, and performance indicators.
+Always communicate in a clear, professional, and user-friendly tone.
+Avoid technical terms such as 'DataFrame', 'pandas', 'dataset structure', or 'data object'.
+Instead, use natural phrases like:
+- your uploaded file
+- your data
+- the vehicle data
+- the file contains...
 
 When asked for a summary, follow this exact protocol:
 1. Convert `Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, and `Current vehicle speed.` to numeric.
@@ -102,6 +117,7 @@ When asked for a summary, follow this exact protocol:
 
 Note: Provide a brief insight.
 Always run Python code to generate this summary.
+{language_style_rule}
 """
             agent = create_agent(df, standard_suffix)
 
@@ -117,13 +133,12 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 if df is not None and agent is not None:
-    # --- Suggested Prompts Section ---
     st.markdown("### 💡 Suggested Prompts")
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("Comprehensive Summary"):
-            st.session_state.suggested_prompt = "Give me a comprehensive summary"
+        if st.button("Summary of Vehicle Performance"):
+            st.session_state.suggested_prompt = "Give me a summary of vehicle performance metrics"
 
     with col2:
         if st.button("Average Fuel Efficiency"):
@@ -133,14 +148,13 @@ if df is not None and agent is not None:
         if st.button("Battery SOH Trend"):
             st.session_state.suggested_prompt = "Show battery SOH trend"
 
-    # --- Chat Input or Suggested Prompt ---
-    user_input = st.chat_input("Ask about your data (e.g., 'Give me a comprehensive summary')")
+    user_input = st.chat_input("Ask about your data (e.g., 'Give me a summary of vehicle performance')")
     prompt = user_input or st.session_state.get("suggested_prompt", None)
 
     if prompt:
-        st.session_state.suggested_prompt = None  # Clear after use
-
+        st.session_state.suggested_prompt = None
         st.session_state.messages.append({"role": "user", "content": prompt})
+
         with st.chat_message("user"):
             st.markdown(prompt)
 
