@@ -59,18 +59,18 @@ def create_agent(df: pd.DataFrame):
 )
 
     # The LangChain Pandas DataFrame Agent setup
-agent_executor = create_pandas_dataframe_agent(
-    llm=llm,
-    df=df,  # Pass the DataFrame directly
-    verbose=False,
-    agent_type="openai-tools",
-    # CRITICAL FIX: Allows Python code execution in sandboxed environment
-    allow_dangerous_code=True, 
-    agent_kwargs={
-        "suffix": SYSTEM_PROMPT_SUFFIX
-    }
-)
-return agent_executor
+    agent_executor = create_pandas_dataframe_agent(
+        llm=llm,
+        df=df,  # Pass the DataFrame directly
+        verbose=False,
+        agent_type="openai-tools",
+        # CRITICAL FIX: Allows Python code execution in sandboxed environment
+        allow_dangerous_code=True, 
+        agent_kwargs={
+            "suffix": SYSTEM_PROMPT_SUFFIX
+        }
+    )
+    return agent_executor
 
 # --- 3. STREAMLIT APP UI ---
 st.set_page_config(page_title="Vehicle Data Analyst", layout="wide")
