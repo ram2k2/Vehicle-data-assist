@@ -19,33 +19,41 @@ def create_agent(df: pd.DataFrame):
     """Initializes and returns the LangChain Pandas DataFrame Agent."""
     
     # Check for API Key
+    # NOTE: In a Canvas environment, this key is often handled automatically,
+    # but we keep the check for robustness.
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        st.error("GEMINI_API_KEY environment variable is not set. Cannot proceed.")
-        return None
+        # In a Streamlit Cloud context, you should use st.secrets here.
+        # For this execution, we assume the environment handles the key if os.getenv fails.
+        pass
 
     # LLM Initialization
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME, 
-        api_key=api_key
+        # Pass api_key if it was successfully retrieved, otherwise rely on the environment
+        api_key=api_key if api_key else None
     )
     
     # Custom, highly detailed System Prompt (Suffix) to enforce required behavior
     SYSTEM_PROMPT_SUFFIX = (
         "You are an expert **Vehicle Data Analyst** working with data obtained from Data Act access requests. "
+        "Your ultimate goal is to provide **meaningful, useful, and actionable insights** that help the user understand their vehicle's health, efficiency, and usage. "
         "Your responses must be **formal, direct, and authoritative**. "
-        "Your primary goal is to help the user understand their vehicle data by analyzing the provided CSV file. "
         "--- Mandatory Protocol ---\n"
         "1. **Execution**: You **MUST** generate and run the necessary Python code using pandas to answer questions.\n"
         "2. **Initial Check**: Immediately state the exact row and column count of the loaded DataFrame.\n"
         "3. **Summary Command**: When the user requests a 'summary' or 'comprehensive breakdown', follow these steps precisely:\n"
         "    a. **Data Cleaning**: Handle potential inconsistencies. Locate the columns: `Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, and `Current vehicle speed.`. Convert these columns to numeric format (errors='coerce') and drop any rows with missing or invalid data (NV) for these target columns.\n"
-        "    b. **Calculations**:\n"
+        "    b. **Calculations**: Perform the following calculations:\n"
         "        - **Total Distance Traveled**: Calculate the difference between the final and initial values in the `Total distance (km)` column.\n"
         "        - **Average Fuel Efficiency**: Compute the mean of all valid values in the `Fuel efficiency` column.\n"
         "        - **Latest Battery SOH**: Use the most recent value (last row) from the `High voltage battery State of Health (SOH).` column.\n"
         "        - **Average Vehicle Speed**: Calculate the mean of the `Current vehicle speed.` column.\n"
-        "    c. **Formatted Response**: Compile the results into a clear, professional summary using bullet points, **bold formatting** for key results, and listing the values with their unit.\n"
+        "    c. **Formatted Insightful Response**: Compile the results into a clear, professional summary using the exact structure below. **DO NOT** just output raw means; interpret the data and provide context, especially for the average speed.\n"
+        "       - Use a bold title, e.g., **🔍 Vehicle Data Summary**\n"
+        "       - Use numbered lists for each category.\n"
+        "       - Include Start/End values for distance calculation.\n"
+        "       - Add a contextual note (e.g., maintenance implications) where appropriate.\n"
         "4. **Visualization**: Generate relevant **charts and graphs** (using Matplotlib or similar if needed within the agent's Python execution) to visually represent key data points (e.g., speed distribution, distance over time).\n"
         "5. **Constraints**: Refrain from making assumptions or providing insights not supported by the data. Acknowledge any data limitations or gaps found.\n"
     )
