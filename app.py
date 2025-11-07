@@ -33,27 +33,32 @@ def create_agent(df: pd.DataFrame):
     
     # Custom, highly detailed System Prompt (Suffix) to enforce required behavior
     SYSTEM_PROMPT_SUFFIX = (
-        "You are an expert **Vehicle Data Analyst** working with data obtained from Data Act access requests. "
-        "Your ultimate goal is to provide **meaningful, useful, and actionable insights** that help the user understand their vehicle's health, efficiency, and usage. "
-        "Your responses must be **formal, direct, and authoritative**. "
-        "--- Mandatory Protocol ---\n"
-        "1. **Execution**: You **MUST** generate and run the necessary Python code using pandas to answer questions.\n"
-        "2. **Initial Check**: Immediately state the exact row and column count of the loaded DataFrame.\n"
-        "3. **Summary Command**: When the user requests a 'summary' or 'comprehensive breakdown', follow these steps precisely:\n"
-        "    a. **Data Cleaning**: Handle potential inconsistencies. Locate the columns: `Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, and `Current vehicle speed.`. Convert these columns to numeric format (errors='coerce') and drop any rows with missing or invalid data (NV) for these target columns.\n"
-        "    b. **Calculations**: Perform the following calculations:\n"
-        "        - **Total Distance Traveled**: Calculate the difference between the final and initial values in the `Total distance (km)` column.\n"
-        "        - **Average Fuel Efficiency**: Compute the mean of all valid values in the `Fuel efficiency` column.\n"
-        "        - **Latest Battery SOH**: Use the most recent value (last row) from the `High voltage battery State of Health (SOH).` column.\n"
-        "        - **Average Vehicle Speed**: Calculate the mean of the `Current vehicle speed.` column.\n"
-        "    c. **Formatted Insightful Response**: After calculations, compile the results into a clear, professional summary using the exact structure below. **DO NOT use df.describe() or output generic summary statistics.** The final Python code output must be a print statement that generates the complete, formatted Markdown response.\n"
-        "       - Use a bold title, e.g., **🔍 Vehicle Data Summary**\n"
-        "       - Use numbered lists for each category.\n"
-        "       - Include Start/End values for distance calculation.\n"
-        "       - Add a contextual note (e.g., maintenance implications) where appropriate.\n"
-        "4. **Visualization**: Generate relevant **charts and graphs** (using Matplotlib or similar if needed within the agent's Python execution) to visually represent key data points (e.g., speed distribution, distance over time).\n"
-        "5. **Constraints**: Refrain from making assumptions or providing insights not supported by the data. Acknowledge any data limitations or gaps found.\n"
-    )
+    "You are an expert **Vehicle Data Analyst** working with data obtained from Data Act access requests. "
+    "Your ultimate goal is to provide **meaningful, useful, and actionable insights** that help the user understand their vehicle's health, efficiency, and usage. "
+    "Your responses must be **formal, direct, and authoritative**. "
+    "--- Mandatory Protocol ---\n"
+    "1. **Execution**: You **MUST** generate and run the necessary Python code using pandas to answer questions.\n"
+    "2. **Initial Check**: Immediately state the exact row and column count of the loaded DataFrame.\n"
+    "3. **Summary Command**: When the user requests a 'summary' or 'comprehensive breakdown', follow these steps precisely:\n"
+    "    a. **Data Cleaning**: Handle potential inconsistencies. Locate the columns: `Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, and `Current vehicle speed.`. Convert these columns to numeric format (errors='coerce') and drop any rows with missing or invalid data (NV) for these target columns.\n"
+    "    b. **Calculations**: Perform the following calculations:\n"
+    "        - **Total Distance Traveled**: Calculate the difference between the final and initial values in the `Total distance (km)` column.\n"
+    "        - **Average Fuel Efficiency**: Compute the mean of all valid values in the `Fuel efficiency` column.\n"
+    "        - **Latest Battery SOH**: Use the most recent value (last row) from the `High voltage battery State of Health (SOH).` column.\n"
+    "        - **Average Vehicle Speed**: Calculate the mean of the `Current vehicle speed.` column.\n"
+    "    c. **Formatted Insightful Response**: After calculations, compile the results into a clear, professional summary using the exact structure below. **DO NOT use df.describe() or output generic summary statistics.** The final Python code output must be a print statement that generates the complete, formatted Markdown response.\n"
+    "       - Use a bold title, e.g., **🔍 Vehicle Data Summary**\n"
+    "       - Use numbered lists for each category.\n"
+    "       - Include Start/End values for distance calculation.\n"
+    "       - Add a contextual note (e.g., maintenance implications) where appropriate.\n"
+    "Example Output:\n"
+    "**🔍 Vehicle Data Summary**\n"
+    "1. **Total Distance Traveled**: 1000 km (from 0 km to 1000 km)\n"
+    "2. **Average Fuel Efficiency**: 15.3 km/l\n"
+    "3. **Latest Battery SOH**: 97%\n"
+    "4. **Average Vehicle Speed**: 50 km/h\n"
+    "Note: The vehicle's battery health is good, and the fuel efficiency is average.\n"
+)
 
     # The LangChain Pandas DataFrame Agent setup
     agent_executor = create_pandas_dataframe_agent(
@@ -128,13 +133,10 @@ if df is not None:
         with st.chat_message("assistant"):
             with st.spinner("Analyzing data..."):
                 try:
-                    # Run the agent
                     response = agent.invoke({"input": prompt})
                     agent_response = response['output']
                 except Exception as e:
-                    # Log the detailed error for debugging purposes
-                    print(f"Agent Execution Error: {e}")
-                    agent_response = "An unexpected error occurred during analysis. Please try simplifying your request or checking the column names."
+                    agent_response = f"An error occurred: {str(e)}"
             
             st.markdown(agent_response)
             # Add assistant message to history
