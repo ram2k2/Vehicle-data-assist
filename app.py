@@ -10,8 +10,9 @@ load_dotenv()
 
 MODEL_NAME = "gemini-2.5-flash"
 
+# Updated to use 'prefix' instead of 'suffix' for stronger instruction enforcement
 @st.cache_resource
-def create_agent(df: pd.DataFrame, suffix: str):
+def create_agent(df: pd.DataFrame, prefix: str):
     api_key = os.getenv("GEMINI_API_KEY")
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
@@ -23,7 +24,8 @@ def create_agent(df: pd.DataFrame, suffix: str):
         verbose=False,
         agent_type="openai-tools",
         allow_dangerous_code=True,
-        agent_kwargs={"suffix": suffix}
+        # Using 'prefix' ensures these instructions are prepended and strictly enforced
+        agent_kwargs={"prefix": prefix}
     )
 
 # --- Streamlit UI ---
@@ -46,47 +48,38 @@ if uploaded_file is not None:
         st.sidebar.success(f"File uploaded: {uploaded_file.name}")
         st.sidebar.dataframe(df.head(), use_container_width=True)
 
-        # Shared language style rule (kept EXACT as requested)
-        language_style_rule = """
-Language Style Rule:
-You MUST NOT use technical terms like 'DataFrame', 'pandas', 'data types', 'memory usage', or 'dataset structure' in any response.
-Instead, refer to the data as 'your uploaded file', 'your vehicle data', or 'your data'.
-You MUST NOT include column classifications or data type breakdowns. Focus only on meaningful insights such as:
-- Total distance traveled
-- Fuel efficiency
-- Battery health
-- Vehicle speed
-- Trends and averages
-This rule applies to ALL responses, including summaries, diagnostics, and follow-up questions.
-"""
-
-        # Strengthened summary instructions, matching all your requirements
-        summary_suffix = f"""
+        # Combined and enforced instructions using a strong agent prefix
+        agent_prefix = """
 You are a professional Vehicle Data Analyst. Your job is to analyze vehicle data and provide structured, actionable insights.
 Always communicate in a clear, professional, and user-friendly tone.
 
-Use pandas to clean and convert all relevant columns to numeric format (errors='coerce'), drop rows with missing or invalid values, and identify the top four most relevant metrics that reflect vehicle performance, health, or efficiency.
+--- **MANDATORY RULES FOR ALL RESPONSES** ---
+1. You MUST NOT use technical terms like 'DataFrame', 'pandas', 'data types', 'memory usage', 'index', or 'dataset structure'.
+2. Instead, refer to the data as 'your uploaded file', 'your vehicle data', or 'your data'.
+3. You MUST NOT include column classifications or raw data type breakdowns.
+4. **CRITICAL:** You MUST NOT include raw descriptive statistics tables (count/mean/std/min/max/percentiles) in any response, especially for summaries.
+5. You MUST NOT show intermediate Python code or steps.
 
-When asked for a summary:
+--- **SPECIFIC RULE FOR SUMMARY REQUESTS (e.g., 'summary of vehicle performance')** ---
+If the user asks for a summary, you MUST:
+- Use pandas to clean and convert all relevant columns to numeric format (errors='coerce'), and drop rows with missing or invalid values.
+- Identify the top four most relevant metrics that reflect vehicle performance, health, or efficiency.
 - Provide the TOP FOUR important metrics only.
 - For each metric, provide ONE value only (choose average, latest, or delta where appropriate).
-  - For Total distance, compute Last value - First value.
-- DO NOT include raw descriptive statistics (no count/mean/std/min/max/percentiles tables).
-- DO NOT show intermediate steps, code, or technical jargon.
+  - For Total distance, compute Last value - First value (total distance traveled).
 - Format the output EXACTLY as Markdown:
 
 **🔍 Vehicle Performance Summary**
-1. **Metric 1**: ...
-2. **Metric 2**: ...
-3. **Metric 3**: ...
-4. **Metric 4**: ...
+1. **Metric 1**: [Calculated Value]
+2. **Metric 2**: [Calculated Value]
+3. **Metric 3**: [Calculated Value]
+4. **Metric 4**: [Calculated Value]
 
 Then provide a short summary paragraph (2–3 lines) describing the vehicle's overall performance based on these metrics.
-
 Always run Python code to generate this summary. Do not guess values—compute them from the uploaded file.
-{language_style_rule}
 """
-        agent = create_agent(df, summary_suffix)
+
+        agent = create_agent(df, agent_prefix)
 
     except Exception as e:
         st.sidebar.error(f"Error reading CSV: {e}")
