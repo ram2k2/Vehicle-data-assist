@@ -9,12 +9,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MODEL_NAME = "gemini-2.5-flash"
-REQUIRED_COLUMNS = [
-    "Total distance (km)",
-    "Fuel efficiency",
-    "High voltage battery State of Health (SOH).",
-    "Current vehicle speed."
-]
 
 @st.cache_resource
 def create_agent(df: pd.DataFrame, suffix: str):
@@ -23,7 +17,6 @@ def create_agent(df: pd.DataFrame, suffix: str):
         model=MODEL_NAME,
         api_key=api_key if api_key else None
     )
-
     return create_pandas_dataframe_agent(
         llm=llm,
         df=df,
@@ -52,8 +45,6 @@ if uploaded_file is not None:
         st.sidebar.success(f"File uploaded: {uploaded_file.name}")
         st.sidebar.dataframe(df.head(), use_container_width=True)
 
-        missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
-
         # Shared language style rule
         language_style_rule = """
 Language Style Rule:
@@ -68,12 +59,16 @@ You MUST NOT include column classifications or data type breakdowns. Focus only 
 This rule applies to ALL responses, including summaries, diagnostics, and follow-up questions.
 """
 
-        if missing:
-            fallback_suffix = f"""
+        summary_suffix = f"""
 You are a professional Vehicle Data Analyst. Your job is to analyze vehicle data and provide structured, actionable insights.
 Always communicate in a clear, professional, and user-friendly tone.
-If the expected columns (`Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, `Current vehicle speed.`) are missing, automatically identify the most relevant numeric columns that reflect vehicle performance, health, or efficiency.
-Use pandas to clean and convert those columns to numeric format (errors='coerce'), drop rows with missing or invalid values, and compute meaningful metrics such as average values, latest readings, or trends.
+Use pandas to clean and convert all relevant columns to numeric format (errors='coerce'), drop rows with missing or invalid values, and identify the top four most relevant metrics that reflect vehicle performance, health, or efficiency.
+
+Use the most appropriate calculation for each metric:
+- For cumulative metrics like total distance, calculate the difference between the last and first value.
+- For performance metrics like fuel efficiency, battery SOH, vehicle speed, fuel level, engine load, use the average value.
+- For health metrics like battery SOH, use the latest value.
+
 Format the output as Markdown:
 
 **🔍 Vehicle Data Summary**
@@ -82,44 +77,12 @@ Format the output as Markdown:
 3. **Metric 3**: ...
 4. **Metric 4**: ...
 
-Note: Provide a brief insight based on the selected metrics.
+Then provide a short summary paragraph (2–3 lines) describing the vehicle's overall performance based on these metrics.
+
 Always run Python code to generate this summary.
 {language_style_rule}
 """
-            agent = create_agent(df, fallback_suffix)
-        else:
-            standard_suffix = f"""
-You are a professional Vehicle Data Analyst. Your job is to analyze vehicle data and provide structured, actionable insights.
-You MUST use Python code with pandas to answer questions. DO NOT use df.describe(), df.info(), or generic summaries.
-Always communicate in a clear, professional, and user-friendly tone.
-Avoid technical terms such as 'DataFrame', 'pandas', 'dataset structure', or 'data object'.
-Instead, use natural phrases like:
-- your uploaded file
-- your data
-- the vehicle data
-- the file contains...
-
-When asked for a summary, follow this exact protocol:
-1. Convert `Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, and `Current vehicle speed.` to numeric.
-2. Drop rows with missing or invalid values.
-3. Calculate:
-   - Total Distance Traveled: last - first value of `Total distance (km)`
-   - Average Fuel Efficiency
-   - Latest Battery SOH
-   - Average Vehicle Speed
-4. Format the output as Markdown:
-
-**🔍 Vehicle Data Summary**
-1. **Total Distance Traveled**: ... km
-2. **Average Fuel Efficiency**: ... km/l
-3. **Latest Battery SOH**: ...%
-4. **Average Vehicle Speed**: ... km/h
-
-Note: Provide a brief insight.
-Always run Python code to generate this summary.
-{language_style_rule}
-"""
-            agent = create_agent(df, standard_suffix)
+        agent = create_agent(df, summary_suffix)
 
     except Exception as e:
         st.sidebar.error(f"Error reading CSV: {e}")
