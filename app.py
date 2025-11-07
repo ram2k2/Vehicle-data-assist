@@ -50,17 +50,7 @@ def create_agent(df: pd.DataFrame):
         Note: Provide a brief insight.
         Always run Python code to generate this summary.
         """
- Format the output as Markdown:
-        "**🔍 Vehicle Data Summary**\n"
-        "1. **Total Distance Traveled**: ... km\n"
-        "2. **Average Fuel Efficiency**: ... km/l\n"
-        "3. **Latest Battery SOH**: ...%\n"
-        "4. **Average Vehicle Speed**: ... km/h\n"
-        "Note: Provide a brief insight.\n"
-        "Always run Python code to generate this summary."
-    )
-
-    return create_pandas_dataframe_agent(
+     return create_pandas_dataframe_agent(
         llm=llm,
         df=df,
         verbose=False,
