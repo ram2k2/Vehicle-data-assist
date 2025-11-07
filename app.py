@@ -17,14 +17,65 @@ REQUIRED_COLUMNS = [
 ]
 
 @st.cache_resource
-def create_agent(df: pd.DataFrame):
+def create_agent(df: pd.DataFrame, suffix: str):
     api_key = os.getenv("GEMINI_API_KEY")
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         api_key=api_key if api_key else None
     )
 
-    SYSTEM_PROMPT_SUFFIX = """
+    return create_pandas_dataframe_agent(
+        llm=llm,
+        df=df,
+        verbose=False,
+        agent_type="openai-tools",
+        allow_dangerous_code=True,
+        agent_kwargs={"suffix": suffix}
+    )
+
+# --- Streamlit UI ---
+st.set_page_config(page_title="Vehicle Data Analyst", layout="wide")
+st.title("🚗 Vehicle Data Analyst Agent")
+
+if not st.session_state.get("initial_greeting_sent", False):
+    st.markdown("Hi, welcome! 😊 Please upload a CSV file for vehicle data analysis.")
+    st.session_state["initial_greeting_sent"] = True
+
+uploaded_file = st.sidebar.file_uploader("Upload your Vehicle Data CSV", type="csv")
+df = None
+agent = None
+
+if uploaded_file is not None:
+    try:
+        data = uploaded_file.getvalue().decode("utf-8")
+        df = pd.read_csv(StringIO(data), sep=';')
+        st.sidebar.success(f"File uploaded: {uploaded_file.name}")
+        st.sidebar.dataframe(df.head(), use_container_width=True)
+
+        missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+
+        if missing:
+            # Fallback prompt if required columns are missing
+            fallback_suffix = """
+You are a professional Vehicle Data Analyst. Your job is to analyze vehicle data and provide structured, actionable insights.
+Always communicate in a clear, professional, and user-friendly tone.
+If the expected columns (`Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, `Current vehicle speed.`) are missing, automatically identify the most relevant numeric columns that reflect vehicle performance, health, or efficiency.
+Use pandas to clean and convert those columns to numeric format (errors='coerce'), drop rows with missing or invalid values, and compute meaningful metrics such as average values, latest readings, or trends.
+Format the output as Markdown:
+
+**🔍 Vehicle Data Summary**
+1. **Metric 1**: ...
+2. **Metric 2**: ...
+3. **Metric 3**: ...
+4. **Metric 4**: ...
+
+Note: Provide a brief insight based on the selected metrics.
+Always run Python code to generate this summary.
+"""
+            agent = create_agent(df, fallback_suffix)
+        else:
+            # Standard prompt when required columns are present
+            standard_suffix = """
 You are a professional Vehicle Data Analyst. Your job is to analyze vehicle data and provide structured, actionable insights.
 You MUST use Python code with pandas to answer questions. DO NOT use df.describe(), df.info(), or generic summaries.
 Always communicate in a clear, professional, and user-friendly tone. Avoid technical terms such as "DataFrame", "pandas", "dataset structure", or "data object" unless explicitly asked by the user.
@@ -53,38 +104,7 @@ When asked for a summary, follow this exact protocol:
 Note: Provide a brief insight.
 Always run Python code to generate this summary.
 """
-
-    return create_pandas_dataframe_agent(
-        llm=llm,
-        df=df,
-        verbose=False,
-        agent_type="openai-tools",
-        allow_dangerous_code=True,
-        agent_kwargs={"suffix": SYSTEM_PROMPT_SUFFIX}
-    )
-
-# --- Streamlit UI ---
-st.set_page_config(page_title="Vehicle Data Analyst", layout="wide")
-st.title("🚗 Vehicle Data Analyst Agent")
-
-if not st.session_state.get("initial_greeting_sent", False):
-    st.markdown("Hi, welcome! 😊 Please upload a CSV file for vehicle data analysis.")
-    st.session_state["initial_greeting_sent"] = True
-
-uploaded_file = st.sidebar.file_uploader("Upload your Vehicle Data CSV", type="csv")
-df = None
-
-if uploaded_file is not None:
-    try:
-        data = uploaded_file.getvalue().decode("utf-8")
-        df = pd.read_csv(StringIO(data), sep=';')
-        st.sidebar.success(f"File uploaded: {uploaded_file.name}")
-        st.sidebar.dataframe(df.head(), use_container_width=True)
-
-        missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
-        if missing:
-            st.error(f"Missing required columns: {', '.join(missing)}")
-            st.stop()
+            agent = create_agent(df, standard_suffix)
 
     except Exception as e:
         st.sidebar.error(f"Error reading CSV: {e}")
@@ -97,9 +117,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if df is not None:
-    agent = create_agent(df)
-
+if df is not None and agent is not None:
     # --- Suggested Prompts Section ---
     st.markdown("### 💡 Suggested Prompts")
     col1, col2, col3 = st.columns(3)
