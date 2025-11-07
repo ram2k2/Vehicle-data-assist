@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 import streamlit as st
-# Correct import for the dataframe agent
 from langchain_experimental.agents.agent_toolkits.pandas.base import create_pandas_dataframe_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 from io import StringIO
@@ -25,7 +24,7 @@ def create_agent(df: pd.DataFrame):
         st.error("GEMINI_API_KEY environment variable is not set. Cannot proceed.")
         return None
 
-    # LLM Initialization (Removed problematic client_options to fix TypeError)
+    # LLM Initialization
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME, 
         api_key=api_key
@@ -57,6 +56,8 @@ def create_agent(df: pd.DataFrame):
         df=df,  # Pass the DataFrame directly
         verbose=False,
         agent_type="openai-tools",
+        # CRITICAL FIX: Allows Python code execution in sandboxed environment
+        allow_dangerous_code=True, 
         agent_kwargs={
             "suffix": SYSTEM_PROMPT_SUFFIX
         }
