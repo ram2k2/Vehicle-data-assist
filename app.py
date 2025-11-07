@@ -91,24 +91,24 @@ for message in st.session_state.messages:
 
 if df is not None:
     agent = create_agent(df)
+
     # --- Suggested Prompts Section ---
     st.markdown("### 💡 Suggested Prompts")
     col1, col2, col3 = st.columns(3)
 
     with col1:
         if st.button("Comprehensive Summary"):
-        st.session_state.suggested_prompt = "Give me a comprehensive summary"
+            st.session_state.suggested_prompt = "Give me a comprehensive summary"
 
     with col2:
         if st.button("Average Fuel Efficiency"):
-        st.session_state.suggested_prompt = "What is the average fuel efficiency?"
+            st.session_state.suggested_prompt = "What is the average fuel efficiency?"
 
     with col3:
         if st.button("Battery SOH Trend"):
-        st.session_state.suggested_prompt = "Show battery SOH trend"
-        
+            st.session_state.suggested_prompt = "Show battery SOH trend"
+
     # --- Chat Input or Suggested Prompt ---
-    
     user_input = st.chat_input("Ask about your data (e.g., 'Give me a comprehensive summary')")
     prompt = user_input or st.session_state.get("suggested_prompt", None)
 
