@@ -19,12 +19,9 @@ def create_agent(df: pd.DataFrame):
     """Initializes and returns the LangChain Pandas DataFrame Agent."""
     
     # Check for API Key
-    # NOTE: In a Canvas environment, this key is often handled automatically,
-    # but we keep the check for robustness.
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        # In a Streamlit Cloud context, you should use st.secrets here.
-        # For this execution, we assume the environment handles the key if os.getenv fails.
+        # In a Streamlit Cloud context, rely on the environment's handling of the key.
         pass
 
     # LLM Initialization
@@ -44,8 +41,12 @@ def create_agent(df: pd.DataFrame):
         "2. **Initial Check**: Immediately state the exact row and column count of the loaded DataFrame.\n"
         "3. **Summary Command**: When the user requests a 'summary' or 'comprehensive breakdown', follow these steps precisely:\n"
         "    a. **Data Cleaning**: Handle potential inconsistencies. Locate the columns: `Total distance (km)`, `Fuel efficiency`, `High voltage battery State of Health (SOH).`, and `Current vehicle speed.`. Convert these columns to numeric format (errors='coerce') and drop any rows with missing or invalid data (NV) for these target columns.\n"
-        "    b. **Calculations**: Perform the required calculations to determine Start, End, and Total distance, Average Fuel Efficiency, Latest Battery SOH, and Average Vehicle Speed. **DO NOT use df.describe() or output generic summary statistics.**\n"
-        "    c. **Formatted Insightful Response**: After calculations, compile the results into a clear, professional summary using the exact structure below. **The final Python code output must be the complete, formatted Markdown response.** Interpret the data and provide context, especially for the average speed.\n"
+        "    b. **Calculations**: Perform the following calculations:\n"
+        "        - **Total Distance Traveled**: Calculate the difference between the final and initial values in the `Total distance (km)` column.\n"
+        "        - **Average Fuel Efficiency**: Compute the mean of all valid values in the `Fuel efficiency` column.\n"
+        "        - **Latest Battery SOH**: Use the most recent value (last row) from the `High voltage battery State of Health (SOH).` column.\n"
+        "        - **Average Vehicle Speed**: Calculate the mean of the `Current vehicle speed.` column.\n"
+        "    c. **Formatted Insightful Response**: After calculations, compile the results into a clear, professional summary using the exact structure below. **DO NOT use df.describe() or output generic summary statistics.** The final Python code output must be a print statement that generates the complete, formatted Markdown response.\n"
         "       - Use a bold title, e.g., **🔍 Vehicle Data Summary**\n"
         "       - Use numbered lists for each category.\n"
         "       - Include Start/End values for distance calculation.\n"
