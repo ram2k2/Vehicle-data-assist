@@ -65,8 +65,9 @@ If the user asks for a summary, you MUST:
 - Use pandas to clean and convert all relevant columns to numeric format (errors='coerce'), and drop rows with missing or invalid values.
 - Identify the top four most relevant metrics that reflect vehicle performance, health, or efficiency.
 - Provide the TOP FOUR important metrics only.
-- For each metric, provide ONE value only (choose average, latest, or delta where appropriate).
-  - For Total distance, compute Last value - First value (total distance traveled).
+- For each of the four metrics, you MUST calculate and provide **ONLY ONE** single, representative value (e.g., the average, the final reading, or the difference between the last and first reading).
+  - For 'Total distance', compute the difference between the last and first recorded values to find the total distance traveled during the logged period.
+- **ABSOLUTELY NO EXCEPTIONS**: Do not include any secondary statistics like Minimum, Maximum, Standard Deviation, or Count.
 - Format the output EXACTLY as Markdown:
 
 **🔍 Vehicle Performance Summary**
