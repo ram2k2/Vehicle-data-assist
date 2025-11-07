@@ -8,3 +8,4 @@ langchain-google-genai>=1.0.0
 google-genai
 python-dotenv
 tabulate  # <-- This is the new, required dependency
+matplotlib>=3.5.0
