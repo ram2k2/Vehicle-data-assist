@@ -92,6 +92,32 @@ except Exception:
 # -----------------------------
 # Page / Session
 # -----------------------------
+with st.sidebar:
+    st.subheader("LLM status")
+    if not GEMINI_AVAILABLE:
+        st.error("SDK not installed: pip install google-generativeai")
+    else:
+        st.write("API key:", "✅ found" if _get_api_key() else "⚠️ missing")
+        st.write("Selected model:", get_model_name() or "⚠️ none")
+
+        if st.button("🔎 List models"):
+            try:
+                st.write([m for m in _list_models(_get_api_key())
+                          if "generateContent" in m["actions"]
+                          or "GENERATE_CONTENT" in [a.upper() for a in m["actions"]]])
+            except Exception as e:
+                st.error(f"list_models failed: {e}")
+
+        if st.button("🧪 Test generate"):
+            try:
+                m = get_text_model()
+                if m is None:
+                    st.error("Model not ready (check key / SDK).")
+                else:
+                    r = m.generate_content("Reply with 'OK' only.")
+                    st.success(f"Model says: {(getattr(r,'text','') or '').strip()}")
+            except Exception as e:
+                st.error(f"Call failed: {e}")
 st.set_page_config(page_title="Vehicle Data Chat (LLM)", page_icon="🚗", layout="wide")
 st.title("🚗 Vehicle Data Chat Assistant — LLM")
 st.caption("Upload a semicolon-delimited CSV and ask questions freely. The LLM plans; the app computes locally.")
