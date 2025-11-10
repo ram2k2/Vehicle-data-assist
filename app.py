@@ -30,11 +30,11 @@ SYSTEM_INSTRUCTION = "You are a concise, helpful, and friendly chat assistant op
 
 if "chat_history" not in st.session_state:
     # Initialize chat history with the system instruction
-    # FIXED: Correct initialization of types.Content using a list of parts.
+    # FIXED: Using types.Part(text=...) instead of the from_text class method for robustness.
     st.session_state.chat_history = [
         types.Content(
             role="model", 
-            parts=[types.Part.from_text("Hello! I'm your minimal Streamlit Gemini Assistant. How can I help you today?")]
+            parts=[types.Part(text="Hello! I'm your minimal Streamlit Gemini Assistant. How can I help you today?")]
         )
     ]
 
@@ -47,7 +47,7 @@ def send_message(prompt):
 
     # 1. Add user message to history
     st.session_state.chat_history.append(
-        types.Content(role="user", parts=[types.Part.from_text(prompt)])
+        types.Content(role="user", parts=[types.Part(text=prompt)]) # FIX applied here
     )
     
     # 2. Configure the API call
@@ -68,13 +68,13 @@ def send_message(prompt):
         # 4. Extract text and add model response to history
         model_text = response.text
         st.session_state.chat_history.append(
-            types.Content(role="model", parts=[types.Part.from_text(model_text)])
+            types.Content(role="model", parts=[types.Part(text=model_text)]) # FIX applied here
         )
         
     except Exception as e:
         error_message = f"Error: Could not get response from Gemini. ({e})"
         st.session_state.chat_history.append(
-            types.Content(role="model", parts=[types.Part.from_text(error_message)])
+            types.Content(role="model", parts=[types.Part(text=error_message)]) # FIX applied here
         )
         st.error(error_message)
 
