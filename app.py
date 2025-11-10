@@ -1,3 +1,16 @@
+# Put near the top, after importing google.generativeai as genai and configuring the key
+def discover_models():
+    try:
+        rows = []
+        for m in genai.list_models():  # requires genai.configure(api_key=...) to be set
+            # Older docs call this field 'supported_generation_methods'.
+            # Newer SDKs expose 'supported_actions'. We'll check both.
+            actions = getattr(m, "supported_generation_methods", None) or getattr(m, "supported_actions", [])
+            if ("generateContent" in actions) or ("GENERATE_CONTENT" in [a.upper() for a in actions]):
+                rows.append(m.name)
+        return rows
+    except Exception as e:
+        return [f"(list_models failed: {e})"]
 # app.py
 import os
 import io
