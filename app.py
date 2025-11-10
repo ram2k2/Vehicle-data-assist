@@ -17,14 +17,13 @@ try:
 except Exception:
     GEMINI_AVAILABLE = False
 
-# --- LLM Helper (Model Name Change Applied Here) ---
+# --- LLM Helper ---
 def _get_api_key():
     # Attempt to get API key from environment variable
     return os.getenv("GOOGLE_API_KEY")
 
 def get_model_name() -> str | None:
     # Using gemini-2.5-flash for the largest context window capacity in the flash tier.
-    # This model is optimized for complex routing tasks involving large schemas (like your column list).
     return "gemini-2.5-flash"
 
 # -----------------------------
@@ -61,6 +60,7 @@ def parse_semicolon_csv(raw: bytes) -> pd.DataFrame:
 def coerce_numeric(series: pd.Series) -> pd.Series:
     """
     Normalize comma-decimals in a column and coerce to numbers.
+    (This is also where "NV", "NA", and empty strings become NaN, effectively cleaning the data)
     """
     return pd.to_numeric(series.astype(str).str.replace(",", ".", regex=False), errors="coerce")
 
@@ -71,6 +71,83 @@ def resolve_col(name: str, columns: List[str]) -> Optional[str]:
     if name in columns:
         return name
     return case_map(columns).get(name.lower())
+
+
+def calculate_summary(df: pd.DataFrame, filename: str) -> str:
+    """
+    Calculates the specific summary metrics requested by the user.
+    Handles data cleaning (NV, NA, empty) via coerce_numeric.
+    """
+    
+    # Define required column names
+    COL_DISTANCE = "Total distance (km)"
+    COL_FUEL = "Fuel efficiency"
+    COL_SOH = "High voltage battery State of Health (SOH)."
+    COL_SPEED = "Current vehicle speed."
+
+    all_cols = df.columns.tolist()
+    
+    # Resolve columns using the existing robust helper
+    try:
+        r_dist = resolve_col(COL_DISTANCE, all_cols)
+        r_fuel = resolve_col(COL_FUEL, all_cols)
+        r_soh = resolve_col(COL_SOH, all_cols)
+        r_speed = resolve_col(COL_SPEED, all_cols)
+        
+        if not all([r_dist, r_fuel, r_soh, r_speed]):
+            missing = [c for c, r in zip([COL_DISTANCE, COL_FUEL, COL_SOH, COL_SPEED], [r_dist, r_fuel, r_soh, r_speed]) if r is None]
+            return f"❌ **Error:** Cannot calculate summary. The following required columns were not found in the data: {', '.join(missing)}." + footer_text(filename)
+            
+    except Exception as e:
+        return f"❌ **Error resolving columns:** {e}" + footer_text(filename)
+
+    results = []
+
+    # 1. Total Distance Traveled (km) = last - first
+    # Dropna removes all invalid entries (including 'NV', 'NA', empty, and non-numeric)
+    s_dist = coerce_numeric(df[r_dist]).dropna()
+    if len(s_dist) >= 2:
+        total_distance = s_dist.iloc[-1] - s_dist.iloc[0]
+        results.append(f"**Total Distance Traveled:** {total_distance:,.2f} km")
+    else:
+        results.append(f"**Total Distance Traveled:** Insufficient data (found {len(s_dist)} valid points)")
+
+    # 2. Average Fuel Efficiency = mean
+    s_fuel = coerce_numeric(df[r_fuel]).dropna()
+    if len(s_fuel) > 0:
+        avg_fuel = s_fuel.mean()
+        # Note: Unit not provided in request, using a generic label
+        results.append(f"**Average Fuel Efficiency:** {avg_fuel:,.2f}")
+    else:
+        results.append("**Average Fuel Efficiency:** No valid data")
+
+    # 3. Latest Battery SOH = last value
+    s_soh = coerce_numeric(df[r_soh]).dropna()
+    if len(s_soh) > 0:
+        latest_soh = s_soh.iloc[-1]
+        results.append(f"**Latest Battery SOH:** {latest_soh:,.2f}%")
+    else:
+        results.append("**Latest Battery SOH:** No valid data")
+
+    # 4. Average Vehicle Speed = mean
+    s_speed = coerce_numeric(df[r_speed]).dropna()
+    if len(s_speed) > 0:
+        avg_speed = s_speed.mean()
+        # Assuming km/h since distance is in km
+        results.append(f"**Average Vehicle Speed:** {avg_speed:,.2f} km/h")
+    else:
+        results.append("**Average Vehicle Speed:** No valid data")
+        
+    
+    summary_text = "\n\n".join(results)
+    
+    return f"""
+## 📊 Vehicle Data Summary Report
+{summary_text}
+---
+*Note: Invalid entries ('NV', 'NA', empty strings, and comma-decimals) were automatically removed before calculation.*
+""" + footer_text(filename)
+
 
 # -----------------------------
 # LLM Router & Narrator
@@ -340,8 +417,8 @@ if uploaded is not None:
         st.session_state.messages.append({
             "role": "assistant",
             "content": (
-                "CSV loaded. Ask anything (e.g., 'how is the driving behaviour', "
-                "'top 5 by vehicle_speed_kmh', 'mean of engine_rpm', 'filter engine_temp_c > 95')."
+                "CSV loaded. Please provide your query"
+                "**'show summary'**)."
             ) + footer_text(st.session_state.filename)
         })
     except Exception as e:
@@ -376,8 +453,24 @@ if q:
         df = st.session_state.df
         cols = df.columns.tolist()
 
-        # Require LLM
-        if not (GEMINI_AVAILABLE and _get_api_key()):
+        # --- NEW: Summary Check (Bypasses LLM for deterministic calculation) ---
+        q_lower = q.lower()
+        if "summary" in q_lower or "report" in q_lower or "metrics" in q_lower:
+            with st.spinner("Calculating custom summary metrics..."):
+                summary_output = calculate_summary(df, st.session_state.filename)
+                
+            with st.chat_message("assistant"):
+                st.markdown(summary_output)
+
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": summary_output
+            })
+            
+        # --- END NEW: Summary Check ---
+
+        # If it's not a summary request, proceed with LLM routing
+        elif not (GEMINI_AVAILABLE and _get_api_key()):
             msg = (
                 "LLM routing is disabled. Set **GOOGLE_API_KEY** (Gemini) and restart the app."
                 + footer_text(st.session_state.filename)
