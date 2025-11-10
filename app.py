@@ -1,4 +1,3 @@
-# app.py
 import os
 import io
 import json
@@ -12,10 +11,21 @@ import streamlit as st
 # --- Optional LLM (Gemini) ---
 GEMINI_AVAILABLE = False
 try:
-    import google.generativeai as genai  # pip install google-generativeai
+    # We require the SDK to be present to run the LLM router
+    import google.generativeai as genai
     GEMINI_AVAILABLE = True
 except Exception:
     GEMINI_AVAILABLE = False
+
+# --- LLM Helper (Model Name Change Applied Here) ---
+def _get_api_key():
+    # Attempt to get API key from environment variable
+    return os.getenv("GOOGLE_API_KEY")
+
+def get_model_name() -> str | None:
+    # Using gemini-2.5-flash for the largest context window capacity in the flash tier.
+    # This model is optimized for complex routing tasks involving large schemas (like your column list).
+    return "gemini-2.5-flash"
 
 # -----------------------------
 # Page / Session
@@ -51,7 +61,6 @@ def parse_semicolon_csv(raw: bytes) -> pd.DataFrame:
 def coerce_numeric(series: pd.Series) -> pd.Series:
     """
     Normalize comma-decimals in a column and coerce to numbers.
-    (Doesn't change DataFrame shape; non-numeric stay NaN.)
     """
     return pd.to_numeric(series.astype(str).str.replace(",", ".", regex=False), errors="coerce")
 
@@ -70,12 +79,12 @@ ALLOWED_OPS = {"shape", "columns", "aggregate", "filter", "sort", "head"}
 ALLOWED_METRICS = {"mean", "median", "min", "max", "std", "sum", "count", "missing_pct"}
 
 def get_model() -> Optional[Any]:
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = _get_api_key()
     if not (GEMINI_AVAILABLE and api_key):
         return None
     genai.configure(api_key=api_key)
-    # Force JSON in router; free-form in narrator
-    return genai.GenerativeModel("gemini-1.5-flash")
+    # Using the highly capable gemini-2.5-flash model
+    return genai.GenerativeModel(get_model_name())
 
 def router_instruction() -> str:
     return """
@@ -108,9 +117,10 @@ def route_with_llm(question: str, columns: List[str]) -> Dict[str, Any]:
     if model is None:
         raise RuntimeError("LLM router unavailable. Set GOOGLE_API_KEY and install google-generativeai.")
     prompt = router_instruction() + "\n" + json.dumps({"columns": columns, "question": question})
-    # Ask for JSON
+    
+    # Instantiate the model with JSON output configuration
     model_json = genai.GenerativeModel(
-        "gemini-1.5-flash",
+        get_model_name(),
         generation_config={"response_mime_type": "application/json"}
     )
     resp = model_json.generate_content(prompt)
@@ -121,6 +131,7 @@ def route_with_llm(question: str, columns: List[str]) -> Dict[str, Any]:
             raise ValueError("Invalid router JSON.")
         return plan
     except Exception as e:
+        # Provide more context on the failure
         raise RuntimeError(f"Router produced invalid JSON: {e}\nRaw: {text[:400]}")
 
 def narrate_with_llm(question: str, facts_text: str) -> Optional[str]:
@@ -147,6 +158,7 @@ Rules:
         resp = model.generate_content(prompt)
         return (getattr(resp, "text", "") or "").strip()
     except Exception:
+        # Fail silently if narration fails, just return the facts
         return None
 
 # -----------------------------
@@ -285,9 +297,17 @@ def execute_plan(df: pd.DataFrame, plan: Dict[str, Any]) -> Tuple[str, Optional[
                     func = {"mean": np.nanmean, "median": np.nanmedian, "min": np.nanmin,
                             "max": np.nanmax, "std": np.nanstd, "sum": np.nansum}[agg]
                     val = float(func(s))
+                
                 name = alias or f"{agg}({col})"
+                
+                # Enhanced formatting for aggregates
                 if isinstance(val, (int, float)) and not (isinstance(val, float) and np.isnan(val)):
-                    lines.append(f"{name}: {val:.6g}")
+                    if isinstance(val, float) and val >= 10:
+                        lines.append(f"{name}: {val:,.2f}") # Two decimal places for large floats
+                    elif isinstance(val, float) and val < 10 and val > 0:
+                        lines.append(f"{name}: {val:.4g}") # Use general format for smaller floats
+                    else:
+                        lines.append(f"{name}: {val:,}")
                 else:
                     lines.append(f"{name}: —")
 
@@ -310,7 +330,13 @@ if uploaded is not None:
         st.session_state.raw_df = raw_df.copy()
         st.session_state.df = raw_df  # keep original; coercion happens per-op
         st.session_state.filename = uploaded.name
+        
         st.success(f"Loaded {uploaded.name} with {len(raw_df):,} rows and {raw_df.shape[1]} columns.")
+        
+        # Display headers in an expander for user reference
+        with st.expander("View available column headers"):
+            st.write(", ".join(raw_df.columns.tolist()))
+
         st.session_state.messages.append({
             "role": "assistant",
             "content": (
@@ -329,6 +355,10 @@ for m in st.session_state.messages:
         st.markdown(m["content"])
         if "_df" in m and isinstance(m["_df"], pd.DataFrame):
             st.dataframe(m["_df"], use_container_width=True)
+        if "_plan" in m and m["_plan"]:
+            with st.expander("Show LLM Plan (JSON)"):
+                st.code(json.dumps(m["_plan"], indent=2), language="json")
+
 
 # -----------------------------
 # Chat input
@@ -347,7 +377,7 @@ if q:
         cols = df.columns.tolist()
 
         # Require LLM
-        if not (GEMINI_AVAILABLE and os.getenv("GOOGLE_API_KEY")):
+        if not (GEMINI_AVAILABLE and _get_api_key()):
             msg = (
                 "LLM routing is disabled. Set **GOOGLE_API_KEY** (Gemini) and restart the app."
                 + footer_text(st.session_state.filename)
@@ -356,17 +386,19 @@ if q:
             st.session_state.messages.append({"role": "assistant", "content": msg})
         else:
             try:
+                # ROUTE
                 plan = route_with_llm(q, cols)
                 ok, msg, norm_plan = validate_plan(plan, df)
+                
                 if not ok:
                     text = f"Couldn't validate your request: {msg}" + footer_text(st.session_state.filename)
                     with st.chat_message("assistant"): st.markdown(text)
-                    st.session_state.messages.append({"role": "assistant", "content": text})
+                    st.session_state.messages.append({"role": "assistant", "content": text, "_plan": plan})
                 else:
-                    # Execute locally
+                    # EXECUTE
                     facts_text, table = execute_plan(df, norm_plan)
 
-                    # Try a narrated answer grounded on facts
+                    # NARRATE
                     narrative = narrate_with_llm(q, facts_text) or ""
                     answer = (narrative.strip() if narrative else facts_text) + footer_text(st.session_state.filename)
 
@@ -374,8 +406,12 @@ if q:
                         st.markdown(answer)
                         if isinstance(table, pd.DataFrame) and not table.empty:
                             st.dataframe(table, use_container_width=True)
+                        
+                        # Display the plan
+                        with st.expander("Show LLM Plan (JSON)"):
+                            st.code(json.dumps(plan, indent=2), language="json")
 
-                    record = {"role": "assistant", "content": answer}
+                    record = {"role": "assistant", "content": answer, "_plan": plan}
                     if isinstance(table, pd.DataFrame) and not table.empty:
                         record["_df"] = table
                     st.session_state.messages.append(record)
