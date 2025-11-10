@@ -134,7 +134,13 @@ uploaded_file = st.file_uploader("Upload your CSV Data Extract", type=["csv"])
 
 if uploaded_file is not None:
     # Read and analyze data when a file is uploaded
-    df = pd.read_csv(uploaded_file)
+    # --- CRITICAL CHANGE HERE: ADD sep=';' ---
+    df = pd.read_csv(uploaded_file, sep=';')
+    
+    # Check the loaded DataFrame (optional but highly recommended for debugging)
+    if df.shape[1] == 1:
+        st.error("Error: The CSV file was read into a single column. Please ensure the file uses semicolon (;) as a separator.")
+        st.stop()
     
     # Perform the data cleaning and calculation
     df_clean, metrics_summary = perform_initial_analysis(df)
