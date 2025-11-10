@@ -1,75 +1,3 @@
-# --- Gemini diagnostics & model selection ---
-import os, json, streamlit as st
-
-GEMINI_AVAILABLE = False
-try:
-    import google.generativeai as genai  # pip install google-generativeai
-    GEMINI_AVAILABLE = True
-except Exception:
-    GEMINI_AVAILABLE = False
-
-def _get_api_key():
-    # Read from Streamlit secrets first; fall back to environment
-    try:
-        key = st.secrets.get("GOOGLE_API_KEY", None) or st.secrets.get("GEMINI_API_KEY", None)
-    except Exception:
-        key = None
-    return key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-
-@st.cache_data(show_spinner=False)
-def _list_models(api_key: str):
-    genai.configure(api_key=api_key)
-    models = list(genai.list_models())
-    out = []
-    for m in models:
-        actions = getattr(m, "supported_generation_methods", None) or getattr(m, "supported_actions", [])
-        out.append({"name": m.name, "actions": list(actions)})
-    return out
-
-@st.cache_data(show_spinner=False)
-def _pick_supported_model(api_key: str) -> str | None:
-    genai.configure(api_key=api_key)
-    preferred = ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-flash-002", "gemini-1.5-pro-002"]
-    available = []
-    for m in genai.list_models():
-        actions = getattr(m, "supported_generation_methods", None) or getattr(m, "supported_actions", [])
-        if ("generateContent" in actions) or ("GENERATE_CONTENT" in [a.upper() for a in actions]):
-            available.append(m.name)
-    for p in preferred:
-        if p in available:
-            return p
-    return available[0] if available else None
-
-def get_model_name() -> str | None:
-    api_key = _get_api_key()
-    if not (GEMINI_AVAILABLE and api_key):
-        return None
-    try:
-        return _pick_supported_model(api_key)
-    except Exception:
-        return None
-
-def get_text_model():
-    """Return a GenerativeModel you can call .generate_content(...) on."""
-    api_key = _get_api_key()
-    name = get_model_name()
-    if not (GEMINI_AVAILABLE and api_key and name):
-        return None
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel(name)
-# Put near the top, after importing google.generativeai as genai and configuring the key
-def discover_models():
-    try:
-        rows = []
-        for m in genai.list_models():  # requires genai.configure(api_key=...) to be set
-            # Older docs call this field 'supported_generation_methods'.
-            # Newer SDKs expose 'supported_actions'. We'll check both.
-            actions = getattr(m, "supported_generation_methods", None) or getattr(m, "supported_actions", [])
-            if ("generateContent" in actions) or ("GENERATE_CONTENT" in [a.upper() for a in actions]):
-                rows.append(m.name)
-        return rows
-    except Exception as e:
-        return [f"(list_models failed: {e})"]
 # app.py
 import os
 import io
@@ -92,32 +20,6 @@ except Exception:
 # -----------------------------
 # Page / Session
 # -----------------------------
-with st.sidebar:
-    st.subheader("LLM status")
-    if not GEMINI_AVAILABLE:
-        st.error("SDK not installed: pip install google-generativeai")
-    else:
-        st.write("API key:", "✅ found" if _get_api_key() else "⚠️ missing")
-        st.write("Selected model:", get_model_name() or "⚠️ none")
-
-        if st.button("🔎 List models"):
-            try:
-                st.write([m for m in _list_models(_get_api_key())
-                          if "generateContent" in m["actions"]
-                          or "GENERATE_CONTENT" in [a.upper() for a in m["actions"]]])
-            except Exception as e:
-                st.error(f"list_models failed: {e}")
-
-        if st.button("🧪 Test generate"):
-            try:
-                m = get_text_model()
-                if m is None:
-                    st.error("Model not ready (check key / SDK).")
-                else:
-                    r = m.generate_content("Reply with 'OK' only.")
-                    st.success(f"Model says: {(getattr(r,'text','') or '').strip()}")
-            except Exception as e:
-                st.error(f"Call failed: {e}")
 st.set_page_config(page_title="Vehicle Data Chat (LLM)", page_icon="🚗", layout="wide")
 st.title("🚗 Vehicle Data Chat Assistant — LLM")
 st.caption("Upload a semicolon-delimited CSV and ask questions freely. The LLM plans; the app computes locally.")
