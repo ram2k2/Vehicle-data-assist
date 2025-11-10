@@ -4,3 +4,4 @@ streamlit
 google-genai
 numpy
 plotly # For potential future visualizations
+google-generativeai>=0.8.2
