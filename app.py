@@ -30,9 +30,12 @@ SYSTEM_INSTRUCTION = "You are a concise, helpful, and friendly chat assistant op
 
 if "chat_history" not in st.session_state:
     # Initialize chat history with the system instruction
-    # The initial message will be displayed from this context, not the list below.
+    # FIXED: Correct initialization of types.Content using a list of parts.
     st.session_state.chat_history = [
-        types.Content(role="model", parts=[types.Part.from_text("Hello! I'm your minimal Streamlit Gemini Assistant. How can I help you today?")])
+        types.Content(
+            role="model", 
+            parts=[types.Part.from_text("Hello! I'm your minimal Streamlit Gemini Assistant. How can I help you today?")]
+        )
     ]
 
 # --- Core Functions ---
