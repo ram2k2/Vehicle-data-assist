@@ -7,7 +7,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Vehicle Data Chat", page_icon="🚗", layout="wide")
 st.title("🚗 Vehicle Data Chat Assistant")
-st.caption("Upload a semicolon-delimited CSV and ask questions about it. No sample data is used.")
+st.caption("Hi! Please upload a CSV file for Vehicle Data Analysis.")
 
 # -----------------------------
 # Session state
