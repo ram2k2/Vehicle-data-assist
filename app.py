@@ -78,6 +78,11 @@ def calculate_summary(df: pd.DataFrame, filename: str) -> str:
     """
     Calculates the specific summary metrics requested by the user.
     Handles data cleaning (NV, NA, empty) via coerce_numeric.
+    
+    UPDATES:
+    1. Removed the H2 heading (##) to reduce font size.
+    2. Implemented fixed-width alignment using f-string padding and a markdown code block.
+    3. Enhanced error reporting for 'Total Distance Traveled' to help debug the 'no value' issue.
     """
     
     # Define required column candidates (resilient to km/miles and minor naming changes)
@@ -119,50 +124,68 @@ def calculate_summary(df: pd.DataFrame, filename: str) -> str:
     r_speed = resolved_cols["Speed"]["name"]
     
     results = []
-
+    
+    # --- Alignment Setup ---
+    # Use 30 characters for the label padding to ensure alignment in monospace block
+    LABEL_WIDTH = 30 
+    
     # 1. Total Distance Traveled ({unit_dist}) = last - first
     # Dropna removes all invalid entries (including 'NV', 'NA', empty, and non-numeric)
     s_dist = coerce_numeric(df[r_dist]).dropna()
+    label = f"{'Total Distance Traveled:':<{LABEL_WIDTH}}"
+    
     if len(s_dist) >= 2:
-        total_distance = s_dist.iloc[-1] - s_dist.iloc[0]
-        # Use the dynamically determined unit label
-        results.append(f"**Total Distance Traveled:** {total_distance:,.2f} {unit_dist}")
+        start_dist = s_dist.iloc[0]
+        end_dist = s_dist.iloc[-1]
+        total_distance = end_dist - start_dist
+        
+        if total_distance > 0:
+            # Success case
+            results.append(f"{label} {total_distance:,.2f} {unit_dist}")
+        else:
+            # Failure case (distance decreased or zero change) - provide diagnostic info
+            results.append(f"{label} ERROR/NO_CHANGE (Start: {start_dist:,.2f}, End: {end_dist:,.2f})")
     else:
-        results.append(f"**Total Distance Traveled:** Insufficient data (found {len(s_dist)} valid points)")
+        results.append(f"{label} Insufficient data (Found {len(s_dist)} valid points)")
 
     # 2. Average Fuel Efficiency = mean
     s_fuel = coerce_numeric(df[r_fuel]).dropna()
+    label = f"{'Average Fuel Efficiency:':<{LABEL_WIDTH}}"
     if len(s_fuel) > 0:
         avg_fuel = s_fuel.mean()
         # Note: Unit not provided in request, using a generic label
-        results.append(f"**Average Fuel Efficiency:** {avg_fuel:,.2f}")
+        results.append(f"{label} {avg_fuel:,.2f}")
     else:
-        results.append("**Average Fuel Efficiency:** No valid data")
+        results.append(f"{label} No valid data")
 
     # 3. Latest Battery SOH = last value
     s_soh = coerce_numeric(df[r_soh]).dropna()
+    label = f"{'Latest Battery SOH:':<{LABEL_WIDTH}}"
     if len(s_soh) > 0:
         latest_soh = s_soh.iloc[-1]
-        results.append(f"**Latest Battery SOH:** {latest_soh:,.2f}%")
+        results.append(f"{label} {latest_soh:,.2f}%")
     else:
-        results.append("**Latest Battery SOH:** No valid data")
+        results.append(f"{label} No valid data")
 
     # 4. Average Vehicle Speed = mean
     s_speed = coerce_numeric(df[r_speed]).dropna()
+    label = f"{'Average Vehicle Speed:':<{LABEL_WIDTH}}"
     if len(s_speed) > 0:
         avg_speed = s_speed.mean()
         # Using a generic unit for speed based on context
-        results.append(f"**Average Vehicle Speed:** {avg_speed:,.2f} units/h") 
+        results.append(f"{label} {avg_speed:,.2f} units/h") 
     else:
-        results.append("**Average Vehicle Speed:** No valid data")
+        results.append(f"{label} No valid data")
         
     
     summary_text = "\n".join(results)
     
+    # Use a strong emphasis ** and a code block ``` for consistent, smaller font and alignment
     return f"""
-## 📊 Vehicle Data Summary Report
+**📊 Vehicle Data Summary Report**
+```
 {summary_text}
----
+```
 *Note: Invalid entries ('NV', 'NA', empty strings, and comma-decimals) were automatically removed before calculation.*
 """ + footer_text(filename)
 
