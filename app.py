@@ -1,16 +1,29 @@
 # app.py
+import os
 import io
+import json
 import re
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Vehicle Data Chat", page_icon="🚗", layout="wide")
-st.title("🚗 Vehicle Data Chat Assistant")
+# --- Optional LLM (Gemini) ---
+GEMINI_AVAILABLE = False
+try:
+    import google.generativeai as genai  # pip install google-generativeai
+    GEMINI_AVAILABLE = True
+except Exception:
+    GEMINI_AVAILABLE = False
 
 # -----------------------------
-# Session state
+# Page / Session
 # -----------------------------
+st.set_page_config(page_title="Vehicle Data Chat (LLM)", page_icon="🚗", layout="wide")
+st.title("🚗 Vehicle Data Chat Assistant — LLM")
+st.caption("Upload a semicolon-delimited CSV and ask questions freely. The LLM plans; the app computes locally.")
+
 if "df" not in st.session_state:
     st.session_state.df = None
 if "raw_df" not in st.session_state:
@@ -21,182 +34,353 @@ if "filename" not in st.session_state:
     st.session_state.filename = None
 
 # -----------------------------
-# Constants & helpers
+# Footer & parsing helpers
 # -----------------------------
-PRIMARY_COLS = [
-    "Total distance (km)",
-    "Fuel efficiency",
-    "High voltage battery State of Health (SOH).",
-    "Current vehicle speed.",
-]
-INVALID_TOKENS = {"", "NA", "NV", None}
-NUM_RE = re.compile(r"[-+]?\d+(?:\.\d+)?")
-
-def footer_text(filename: str | None) -> str:
+def footer_text(filename: Optional[str]) -> str:
     name = filename if filename else "no file"
     return f"\n\n*data extracted from ({name})*"
 
-def parse_semicolon_csv_strict(raw: bytes) -> pd.DataFrame:
-    """Strict semicolon parsing; no delimiter auto-detection."""
+def parse_semicolon_csv(raw: bytes) -> pd.DataFrame:
+    """
+    STRICT: semicolon is the ONLY delimiter; no auto-detection.
+    """
     text = raw.decode("utf-8", errors="replace")
     df = pd.read_csv(io.StringIO(text), sep=";", engine="python", on_bad_lines="skip")
     return df
 
-def first_numeric_subvalue(cell: str | float | int) -> float:
+def coerce_numeric(series: pd.Series) -> pd.Series:
     """
-    Within a single cell (already split by ';'), cells may contain comma-separated sub-values
-    like '13.525000,13.375000'. Pick the FIRST numeric token deterministically.
+    Normalize comma-decimals in a column and coerce to numbers.
+    (Doesn't change DataFrame shape; non-numeric stay NaN.)
     """
-    if cell is None:
-        return np.nan
-    s = str(cell).strip()
-    if s in INVALID_TOKENS:
-        return np.nan
-    # split by comma INSIDE the cell (not the CSV delimiter)
-    parts = [p.strip() for p in s.split(",")]
-    for p in parts:
-        if p in INVALID_TOKENS:
-            continue
-        # Try plain float, else handle comma-as-decimal
-        try:
-            return float(p)
-        except Exception:
-            if "," in p and "." not in p:  # e.g., "13,5"
-                try:
-                    return float(p.replace(",", "."))
-                except Exception:
-                    pass
-        # Fallback: extract numeric with regex
-        m = NUM_RE.search(p)
-        if m:
-            try:
-                return float(m.group())
-            except Exception:
-                pass
-    return np.nan
+    return pd.to_numeric(series.astype(str).str.replace(",", ".", regex=False), errors="coerce")
 
-def clean_primary_columns(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    for col in PRIMARY_COLS:
-        if col in out.columns:
-            out[col] = out[col].apply(first_numeric_subvalue)
-    # Drop columns that end up entirely empty (ignored as per instruction)
-    for col in PRIMARY_COLS:
-        if col in out.columns and out[col].notna().sum() == 0:
-            out.drop(columns=[col], inplace=True)
-    return out
+def case_map(columns: List[str]) -> Dict[str, str]:
+    return {c.lower(): c for c in columns}
 
-def summarize_metrics(df: pd.DataFrame, filename: str | None) -> str:
-    # Ensure required columns exist
-    missing = [c for c in PRIMARY_COLS if c not in df.columns]
-    if missing:
-        return (
-            "**I couldn't find these required headers:** "
-            + ", ".join(f"`{c}`" for c in missing)
-            + ".\nPlease share the exact column names (case-sensitive) or provide a mapping."
-            + footer_text(filename)
-        )
+def resolve_col(name: str, columns: List[str]) -> Optional[str]:
+    if name in columns:
+        return name
+    return case_map(columns).get(name.lower())
 
-    s_distance = df["Total distance (km)"].dropna()
-    s_fueleff = df["Fuel efficiency"].dropna()
-    s_soh     = df["High voltage battery State of Health (SOH)."].dropna()
-    s_speed   = df["Current vehicle speed."].dropna()
+# -----------------------------
+# LLM Router & Narrator
+# -----------------------------
+ALLOWED_OPS = {"shape", "columns", "aggregate", "filter", "sort", "head"}
+ALLOWED_METRICS = {"mean", "median", "min", "max", "std", "sum", "count", "missing_pct"}
 
-    # Calculations (as specified)
-    total_distance = float(s_distance.iloc[-1] - s_distance.iloc[0]) if len(s_distance) >= 2 else np.nan
-    avg_fe        = float(s_fueleff.mean()) if len(s_fueleff) else np.nan
-    latest_soh    = float(s_soh.iloc[-1]) if len(s_soh) else np.nan
-    avg_speed     = float(s_speed.mean()) if len(s_speed) else np.nan
+def get_model() -> Optional[Any]:
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not (GEMINI_AVAILABLE and api_key):
+        return None
+    genai.configure(api_key=api_key)
+    # Force JSON in router; free-form in narrator
+    return genai.GenerativeModel("gemini-1.5-flash")
 
-    def fmt(x, d=3):
-        return "—" if (x is None or (isinstance(x, float) and np.isnan(x))) else f"{x:.{d}f}"
+def router_instruction() -> str:
+    return """
+You are a router that converts a user's question about a tabular CSV into a SMALL JSON plan.
 
-    body = (
-        f"**Total Distance:** {fmt(total_distance)} km\n"
-        f"**Average Fuel Efficiency:** {fmt(avg_fe)} (units per file)\n"
-        f"**Latest Battery SOH:** {fmt(latest_soh, 0)} %\n"
-        f"**Average Vehicle Speed:** {fmt(avg_speed)} (units per file)"
+ALLOWED OPS:
+- shape: {}
+- columns: {}
+- aggregate: {"metrics":[{"agg":"mean|median|min|max|std|sum|count|missing_pct","col":"<exact header>","as":"<optional>"}]}
+- filter: {"col":"<exact header>","op":"==|!=|>|>=|<|<=","value":"<number|string>"}
+- sort: {"by":"<exact header>","ascending": true|false}
+- head: {"n": <int>}
+
+SCHEMA:
+{"plan":[{"op":"<one_of_allowed_ops>", ...args}], "return":"text|table|both"}
+
+RULES:
+- Use ONLY the columns provided (case sensitive, exact).
+- Use ONLY allowed ops/fields. Keep the plan short and safe.
+- For “top N by X”: use sort(desc) + head(N).
+- For “bottom N by X”: use sort(asc) + head(N).
+- If asking “how many rows/columns”: use shape.
+- If asking “headers”: use columns.
+- If “driving behaviour/behavior” or “overview”: choose sensible aggregates on speed/load/efficiency if such columns exist (names must match the provided headers exactly).
+- Output ONLY minified JSON, no prose.
+"""
+
+def route_with_llm(question: str, columns: List[str]) -> Dict[str, Any]:
+    model = get_model()
+    if model is None:
+        raise RuntimeError("LLM router unavailable. Set GOOGLE_API_KEY and install google-generativeai.")
+    prompt = router_instruction() + "\n" + json.dumps({"columns": columns, "question": question})
+    # Ask for JSON
+    model_json = genai.GenerativeModel(
+        "gemini-1.5-flash",
+        generation_config={"response_mime_type": "application/json"}
     )
-
-    # If any of the four columns contained inner commas in the ORIGINAL data, note the assumption
-    note = ""
+    resp = model_json.generate_content(prompt)
+    text = (getattr(resp, "text", "") or "").strip()
     try:
-        if st.session_state.raw_df is not None:
-            for col in PRIMARY_COLS:
-                if col in st.session_state.raw_df.columns:
-                    if st.session_state.raw_df[col].astype(str).str.contains(",", regex=False).any():
-                        note = ("\n\n_Note: Cells with comma‑separated values were parsed using the **first** "
-                                "numeric value. If you prefer a different rule (e.g., average/second value), "
-                                "tell me and I’ll recalculate._")
-                        break
+        plan = json.loads(text)
+        if not isinstance(plan, dict) or "plan" not in plan:
+            raise ValueError("Invalid router JSON.")
+        return plan
+    except Exception as e:
+        raise RuntimeError(f"Router produced invalid JSON: {e}\nRaw: {text[:400]}")
+
+def narrate_with_llm(question: str, facts_text: str) -> Optional[str]:
+    """
+    Optional natural-language answer grounded on computed facts.
+    """
+    model = get_model()
+    if model is None:
+        return None
+    prompt = f"""You are an analyst. Answer the user's question concisely using ONLY these computed facts.
+
+Question:
+{question}
+
+Computed facts (tabular/text you can quote):
+{facts_text}
+
+Rules:
+- Be precise and neutral. Do not fabricate numbers.
+- If facts don't fully answer, say what else is needed.
+- Keep to 4-7 short sentences.
+"""
+    try:
+        resp = model.generate_content(prompt)
+        return (getattr(resp, "text", "") or "").strip()
     except Exception:
-        pass
-
-    return body + note + footer_text(filename)
+        return None
 
 # -----------------------------
-# Upload area (only user CSV; no Test.csv)
+# Validate plan
 # -----------------------------
-uploaded_file = st.file_uploader("**Hi! Please upload the CSV file**", type=["csv"])
+def validate_plan(plan: Dict[str, Any], df: pd.DataFrame, max_rows: int = 20) -> Tuple[bool, str, Dict[str, Any]]:
+    if not isinstance(plan, dict) or "plan" not in plan or not isinstance(plan["plan"], list):
+        return False, "Plan format invalid.", plan
 
-if uploaded_file:
+    columns = df.columns.tolist()
+    normalized = {"plan": [], "return": plan.get("return")}
+
+    for step in plan["plan"]:
+        if not isinstance(step, dict) or "op" not in step:
+            return False, "Each step must be an object with 'op'.", plan
+        op = step["op"]
+        if op not in ALLOWED_OPS:
+            return False, f"Unsupported operation: {op}", plan
+
+        stp = {"op": op}
+
+        if op in ("shape", "columns"):
+            pass
+
+        elif op == "aggregate":
+            metrics = step.get("metrics", [])
+            if not isinstance(metrics, list) or not metrics:
+                return False, "aggregate.metrics must be a non-empty list.", plan
+            out = []
+            for m in metrics:
+                if not isinstance(m, dict):
+                    return False, "aggregate metric must be an object.", plan
+                agg = m.get("agg"); col = m.get("col"); alias = m.get("as")
+                if agg not in ALLOWED_METRICS:
+                    return False, f"Unsupported metric: {agg}", plan
+                rcol = resolve_col(col, columns)
+                if not rcol:
+                    return False, f"Column not found: {col}", plan
+                out.append({"agg": agg, "col": rcol, "as": alias})
+            stp["metrics"] = out
+
+        elif op == "filter":
+            col = step.get("col"); op2 = step.get("op"); val = step.get("value")
+            if not (col and op2 and (val is not None)):
+                return False, "filter requires 'col','op','value'.", plan
+            if op2 not in ("==", "!=", ">", ">=", "<", "<="):
+                return False, f"Unsupported operator: {op2}", plan
+            rcol = resolve_col(col, columns)
+            if not rcol:
+                return False, f"Column not found: {col}", plan
+            stp.update({"col": rcol, "op": op2, "value": val})
+
+        elif op == "sort":
+            by = step.get("by")
+            if not by:
+                return False, "sort requires 'by'.", plan
+            rcol = resolve_col(by, columns)
+            if not rcol:
+                return False, f"Column not found: {by}", plan
+            stp.update({"by": rcol, "ascending": bool(step.get("ascending", False))})
+
+        elif op == "head":
+            n = step.get("n", 5)
+            try: n = int(n)
+            except: n = 5
+            n = max(1, min(max_rows, n))
+            stp["n"] = n
+
+        normalized["plan"].append(stp)
+
+    ret = normalized.get("return")
+    if ret and ret not in ("text", "table", "both"): normalized["return"] = "both"
+    return True, "ok", normalized
+
+# -----------------------------
+# Execute plan (local, private)
+# -----------------------------
+def execute_plan(df: pd.DataFrame, plan: Dict[str, Any]) -> Tuple[str, Optional[pd.DataFrame]]:
+    lines: List[str] = []
+    table: Optional[pd.DataFrame] = None
+    working = df.copy()
+
+    for step in plan["plan"]:
+        op = step["op"]
+
+        if op == "shape":
+            lines.append(f"Rows: {len(working):,}, Columns: {working.shape[1]}")
+
+        elif op == "columns":
+            cols = working.columns.tolist()
+            lines.append("Headers: " + ", ".join(cols))
+
+        elif op == "filter":
+            col, op2, val = step["col"], step["op"], step["value"]
+            s_num = coerce_numeric(working[col])
+            # decide numeric or string compare
+            val_num = None
+            try:
+                val_num = float(str(val).replace(",", "."))
+            except Exception:
+                val_num = None
+            if val_num is not None and (pd.api.types.is_numeric_dtype(working[col]) or s_num.notna().any()):
+                left, right = s_num, val_num
+            else:
+                left, right = working[col].astype(str), str(val)
+
+            if op2 == "==": mask = left == right
+            elif op2 == "!=": mask = left != right
+            elif op2 == ">": mask = left > right
+            elif op2 == ">=": mask = left >= right
+            elif op2 == "<": mask = left < right
+            elif op2 == "<=": mask = left <= right
+            working = working[mask]
+
+        elif op == "sort":
+            by = step["by"]; asc = step["ascending"]
+            s_num = coerce_numeric(working[by])
+            if s_num.notna().any():
+                working = working.assign(_k=s_num).sort_values("_k", ascending=asc).drop(columns=["_k"])
+            else:
+                working = working.sort_values(by, ascending=asc, kind="mergesort")
+
+        elif op == "head":
+            working = working.head(step["n"])
+            table = working
+
+        elif op == "aggregate":
+            for m in step["metrics"]:
+                agg, col, alias = m["agg"], m["col"], m.get("as")
+                s = coerce_numeric(working[col])
+                if agg == "missing_pct":
+                    val = float(100 * s.isna().mean())
+                elif agg == "count":
+                    val = int(s.notna().sum())
+                else:
+                    func = {"mean": np.nanmean, "median": np.nanmedian, "min": np.nanmin,
+                            "max": np.nanmax, "std": np.nanstd, "sum": np.nansum}[agg]
+                    val = float(func(s))
+                name = alias or f"{agg}({col})"
+                if isinstance(val, (int, float)) and not (isinstance(val, float) and np.isnan(val)):
+                    lines.append(f"{name}: {val:.6g}")
+                else:
+                    lines.append(f"{name}: —")
+
+    ret = plan.get("return", "both")
+    if ret == "text":
+        return ("\n".join(lines) if lines else "Done."), None
+    elif ret == "table":
+        return ("", table if table is not None else working.head(20))
+    else:
+        return ("\n".join(lines)), (table if table is not None else None)
+
+# -----------------------------
+# Upload (no Test.csv; strict ;)
+# -----------------------------
+uploaded = st.file_uploader("Upload a **semicolon-delimited** CSV", type=["csv"])
+if uploaded is not None:
     try:
-        raw = uploaded_file.read()
-        raw_df = parse_semicolon_csv_strict(raw)
+        raw = uploaded.read()
+        raw_df = parse_semicolon_csv(raw)
         st.session_state.raw_df = raw_df.copy()
-        df = clean_primary_columns(raw_df)
-        st.session_state.df = df
-        st.session_state.filename = uploaded_file.name
-
-        st.success(f"Loaded {uploaded_file.name} with {len(raw_df):,} rows and {raw_df.shape[1]} columns.")
+        st.session_state.df = raw_df  # keep original; coercion happens per-op
+        st.session_state.filename = uploaded.name
+        st.success(f"Loaded {uploaded.name} with {len(raw_df):,} rows and {raw_df.shape[1]} columns.")
         st.session_state.messages.append({
             "role": "assistant",
             "content": (
-                "CSV loaded. You can now ask:\n"
-                "- `summary` (calculates Total Distance, Avg Fuel Efficiency, Latest SOH, Avg Speed)\n"
-                "- `columns` (list headers)\n"
+                "CSV loaded. Ask anything (e.g., 'how is the driving behaviour', "
+                "'top 5 by vehicle_speed_kmh', 'mean of engine_rpm', 'filter engine_temp_c > 95')."
             ) + footer_text(st.session_state.filename)
         })
     except Exception as e:
         st.error(f"Failed to parse CSV: {e}")
 
 # -----------------------------
-# Show chat history
+# Chat history
 # -----------------------------
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
+        if "_df" in m and isinstance(m["_df"], pd.DataFrame):
+            st.dataframe(m["_df"], use_container_width=True)
 
-# Disable chat until a file is uploaded
-query = st.chat_input("Ask about your data…", disabled=(st.session_state.df is None))
-
-if query:
-    st.session_state.messages.append({"role": "user", "content": query})
-    with st.chat_message("user"):
-        st.markdown(query)
+# -----------------------------
+# Chat input
+# -----------------------------
+q = st.chat_input("Ask about your data…", disabled=(st.session_state.df is None))
+if q:
+    st.session_state.messages.append({"role": "user", "content": q})
+    with st.chat_message("user"): st.markdown(q)
 
     if st.session_state.df is None:
         reply = "Please upload a semicolon-delimited CSV first." + footer_text(None)
+        with st.chat_message("assistant"): st.markdown(reply)
+        st.session_state.messages.append({"role": "assistant", "content": reply})
     else:
         df = st.session_state.df
-        cols = list(st.session_state.raw_df.columns.astype(str)) if st.session_state.raw_df is not None else []
-        q = query.strip().lower()
+        cols = df.columns.tolist()
 
-        if "summary" in q:
-            reply = summarize_metrics(df, st.session_state.filename)
-
-        elif "columns" in q:
-            reply = ("Columns:\n- " + "\n- ".join(cols)) + footer_text(st.session_state.filename)
-
+        # Require LLM
+        if not (GEMINI_AVAILABLE and os.getenv("GOOGLE_API_KEY")):
+            msg = (
+                "LLM routing is disabled. Set **GOOGLE_API_KEY** (Gemini) and restart the app."
+                + footer_text(st.session_state.filename)
+            )
+            with st.chat_message("assistant"): st.markdown(msg)
+            st.session_state.messages.append({"role": "assistant", "content": msg})
         else:
-            # Minimal fallback (keep it lean)
-            reply = (
-                "I can help with:\n"
-                "- `summary`\n"
-                "- `columns`\n"
-                "If column names differ from the expected headers, please share the exact names or a mapping."
-            ) + footer_text(st.session_state.filename)
+            try:
+                plan = route_with_llm(q, cols)
+                ok, msg, norm_plan = validate_plan(plan, df)
+                if not ok:
+                    text = f"Couldn't validate your request: {msg}" + footer_text(st.session_state.filename)
+                    with st.chat_message("assistant"): st.markdown(text)
+                    st.session_state.messages.append({"role": "assistant", "content": text})
+                else:
+                    # Execute locally
+                    facts_text, table = execute_plan(df, norm_plan)
 
-    with st.chat_message("assistant"):
-        st.markdown(reply)
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+                    # Try a narrated answer grounded on facts
+                    narrative = narrate_with_llm(q, facts_text) or ""
+                    answer = (narrative.strip() if narrative else facts_text) + footer_text(st.session_state.filename)
+
+                    with st.chat_message("assistant"):
+                        st.markdown(answer)
+                        if isinstance(table, pd.DataFrame) and not table.empty:
+                            st.dataframe(table, use_container_width=True)
+
+                    record = {"role": "assistant", "content": answer}
+                    if isinstance(table, pd.DataFrame) and not table.empty:
+                        record["_df"] = table
+                    st.session_state.messages.append(record)
+
+            except Exception as e:
+                err = f"Sorry, I couldn't process that: {e}" + footer_text(st.session_state.filename)
+                with st.chat_message("assistant"): st.markdown(err)
+                st.session_state.messages.append({"role": "assistant", "content": err})
