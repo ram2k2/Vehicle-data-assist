@@ -1,4 +1,40 @@
 # app.py
+# --- Diagnostics for Gemini availability ---
+import os
+import streamlit as st
+
+GEMINI_AVAILABLE = False
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except Exception:
+    GEMINI_AVAILABLE = False
+
+def _get_api_key():
+    try:
+        key = st.secrets.get("GOOGLE_API_KEY", None)
+    except Exception:
+        key = None
+    if not key:
+        key = os.getenv("GOOGLE_API_KEY")
+    return key
+
+def get_model():
+    api_key = _get_api_key()
+    if not (GEMINI_AVAILABLE and api_key):
+        return None
+    try:
+        genai.configure(api_key=api_key)
+        return genai.GenerativeModel("gemini-1.5-flash")
+    except Exception:
+        return None
+
+with st.sidebar:
+    st.subheader("LLM status")
+    if not GEMINI_AVAILABLE:
+        st.error("Gemini SDK not installed (`google-generativeai`).")
+    else:
+        st.success("API key found.") if _get_api_key() else st.warning("No API key detected.")
 import os
 import io
 import json
