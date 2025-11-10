@@ -7,7 +7,6 @@ import streamlit as st
 
 st.set_page_config(page_title="Vehicle Data Chat", page_icon="🚗", layout="wide")
 st.title("🚗 Vehicle Data Chat Assistant")
-st.caption("Hi! Please upload a CSV file for Vehicle Data Analysis.")
 
 # -----------------------------
 # Session state
@@ -138,7 +137,7 @@ def summarize_metrics(df: pd.DataFrame, filename: str | None) -> str:
 # -----------------------------
 # Upload area (only user CSV; no Test.csv)
 # -----------------------------
-uploaded_file = st.file_uploader("Upload a **semicolon-delimited** CSV", type=["csv"])
+uploaded_file = st.file_uploader("**Hi! Please upload the CSV file**", type=["csv"])
 
 if uploaded_file:
     try:
