@@ -1,11 +1,6 @@
-streamlit>=1.20.0
-pandas>=2.0.0
-langchain>=0.2.0
-langchain-core>=0.2.0
-langchain-community>=0.0.30
-langchain-experimental>=0.0.60
-langchain-google-genai>=1.0.0
+# requirements.txt
+pandas
+streamlit
 google-genai
-python-dotenv
-tabulate  # <-- This is the new, required dependency
-matplotlib>=3.5.0
+numpy
+plotly # For potential future visualizations
