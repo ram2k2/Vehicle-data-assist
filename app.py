@@ -68,6 +68,7 @@ def case_map(columns: List[str]) -> Dict[str, str]:
     return {c.lower(): c for c in columns}
 
 def resolve_col(name: str, columns: List[str]) -> Optional[str]:
+    """Resolves a column name (case-insensitive) based on a candidate name."""
     if name in columns:
         return name
     return case_map(columns).get(name.lower())
@@ -79,36 +80,53 @@ def calculate_summary(df: pd.DataFrame, filename: str) -> str:
     Handles data cleaning (NV, NA, empty) via coerce_numeric.
     """
     
-    # Define required column names
-    COL_DISTANCE = "Total distance (km)"
-    COL_FUEL = "Fuel efficiency"
-    COL_SOH = "High voltage battery State of Health (SOH)."
-    COL_SPEED = "Current vehicle speed."
+    # Define required column candidates (resilient to km/miles and minor naming changes)
+    COL_MAPPING = {
+        "Distance": ["Total distance (km)", "Total distance (miles)"],
+        "FuelEfficiency": ["Fuel efficiency"],
+        "SOH": ["High voltage battery State of Health (SOH)."],
+        "Speed": ["Current vehicle speed."],
+    }
 
     all_cols = df.columns.tolist()
+    resolved_cols = {}
     
-    # Resolve columns using the existing robust helper
-    try:
-        r_dist = resolve_col(COL_DISTANCE, all_cols)
-        r_fuel = resolve_col(COL_FUEL, all_cols)
-        r_soh = resolve_col(COL_SOH, all_cols)
-        r_speed = resolve_col(COL_SPEED, all_cols)
-        
-        if not all([r_dist, r_fuel, r_soh, r_speed]):
-            missing = [c for c, r in zip([COL_DISTANCE, COL_FUEL, COL_SOH, COL_SPEED], [r_dist, r_fuel, r_soh, r_speed]) if r is None]
-            return f"❌ **Error:** Cannot calculate summary. The following required columns were not found in the data: {', '.join(missing)}." + footer_text(filename)
+    # Resolve columns using the existing robust helper and candidate lists
+    for metric, candidates in COL_MAPPING.items():
+        resolved_cols[metric] = None
+        for name in candidates:
+            # resolve_col handles case-insensitivity
+            r_col = resolve_col(name, all_cols)
+            if r_col:
+                # Store the resolved name and the original candidate name to infer units
+                resolved_cols[metric] = {"name": r_col, "unit_source": name}
+                break
+                
+    # Extract resolved column names and check for missing mandatory columns
+    missing = [metric for metric, r in resolved_cols.items() if r is None]
+    
+    if missing:
+        # Create a list of the *intended* column names that were missing
+        missing_names = [COL_MAPPING[m][0] for m in missing]
+        return f"❌ **Error:** Cannot calculate summary. The following required data points were not found (expected one of these columns): {', '.join(missing_names)}." + footer_text(filename)
             
-    except Exception as e:
-        return f"❌ **Error resolving columns:** {e}" + footer_text(filename)
-
+    # Extract resolved column variables for cleaner use
+    r_dist = resolved_cols["Distance"]["name"]
+    # Determine the unit based on the column name found
+    unit_dist = "km" if "(km)" in resolved_cols["Distance"]["unit_source"].lower() else "miles"
+    r_fuel = resolved_cols["FuelEfficiency"]["name"]
+    r_soh = resolved_cols["SOH"]["name"]
+    r_speed = resolved_cols["Speed"]["name"]
+    
     results = []
 
-    # 1. Total Distance Traveled (km) = last - first
+    # 1. Total Distance Traveled ({unit_dist}) = last - first
     # Dropna removes all invalid entries (including 'NV', 'NA', empty, and non-numeric)
     s_dist = coerce_numeric(df[r_dist]).dropna()
     if len(s_dist) >= 2:
         total_distance = s_dist.iloc[-1] - s_dist.iloc[0]
-        results.append(f"**Total Distance Traveled:** {total_distance:,.2f} km")
+        # Use the dynamically determined unit label
+        results.append(f"**Total Distance Traveled:** {total_distance:,.2f} {unit_dist}")
     else:
         results.append(f"**Total Distance Traveled:** Insufficient data (found {len(s_dist)} valid points)")
 
@@ -133,13 +151,13 @@ def calculate_summary(df: pd.DataFrame, filename: str) -> str:
     s_speed = coerce_numeric(df[r_speed]).dropna()
     if len(s_speed) > 0:
         avg_speed = s_speed.mean()
-        # Assuming km/h since distance is in km
-        results.append(f"**Average Vehicle Speed:** {avg_speed:,.2f} km/h")
+        # Using a generic unit for speed based on context
+        results.append(f"**Average Vehicle Speed:** {avg_speed:,.2f} units/h") 
     else:
         results.append("**Average Vehicle Speed:** No valid data")
         
     
-    summary_text = "\n\n".join(results)
+    summary_text = "\n".join(results)
     
     return f"""
 ## 📊 Vehicle Data Summary Report
@@ -230,6 +248,7 @@ Rules:
 - Be precise and neutral. Do not fabricate numbers.
 - If facts don't fully answer, say what else is needed.
 - Keep to 4-7 short sentences.
+- IMPORTANT: Conclude your response by proactively asking the user a single, relevant, follow-up question based on the data. For example: 'Would you like to know the maximum value for [Specific Column Name]?' or 'How did the average [Other Column Name] change over this period?'
 """
     try:
         resp = model.generate_content(prompt)
@@ -289,7 +308,7 @@ def validate_plan(plan: Dict[str, Any], df: pd.DataFrame, max_rows: int = 20) ->
             stp.update({"col": rcol, "op": op2, "value": val})
 
         elif op == "sort":
-            by = step.get("by")
+            by = step.get("by"); asc = step["ascending"]
             if not by:
                 return False, "sort requires 'by'.", plan
             rcol = resolve_col(by, columns)
@@ -417,7 +436,8 @@ if uploaded is not None:
         st.session_state.messages.append({
             "role": "assistant",
             "content": (
-                "CSV loaded. Please provide your query"
+                "CSV loaded. Ask anything (e.g., 'how is the driving behaviour', "
+                "'top 5 by vehicle_speed_kmh', 'mean of engine_rpm', 'filter engine_temp_c > 95', "
                 "**'show summary'**)."
             ) + footer_text(st.session_state.filename)
         })
