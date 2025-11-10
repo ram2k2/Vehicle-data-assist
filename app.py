@@ -1,108 +1,111 @@
-import streamlit as st
+# app.py
 import os
-from google import genai
-from google.genai import types
+import streamlit as st
+import pandas as pd
 
-# --- Configuration ---
-# Your API key will be securely read from the environment variables managed by the platform.
-# No need to hardcode the key.
-try:
-    API_KEY = os.environ['GEMINI_API_KEY']
-except KeyError:
-    # Fallback message if running locally without environment variable set
-    API_KEY = None 
-    st.error("GEMINI_API_KEY environment variable not found. Please set it to run the app.")
+from vehicle_data_assist1 import VehicleDataAssist1, AgentConfig
 
-# Initialize the Gemini Client
-if API_KEY:
+st.set_page_config(page_title="Vehicle Data Assist1 (semicolon CSV)", page_icon="🚗", layout="wide")
+
+cfg = AgentConfig(
+    top_k_metrics=4,
+    use_gemini=bool(os.getenv("GOOGLE_API_KEY")),
+    gemini_api_key=os.getenv("GOOGLE_API_KEY"),
+    gemini_model="gemini-1.5-flash",
+)
+agent = VehicleDataAssist1(cfg)
+
+# Session state
+if "df" not in st.session_state:
+    st.session_state.df = None
+if "confirmed" not in st.session_state:
+    st.session_state.confirmed = False
+
+st.title("🚗 Vehicle Data Assist1 — Semicolon CSV Only")
+st.caption("Formal, objective summaries from semicolon-delimited CSV logs.")
+
+with st.expander("ℹ️ Startup", expanded=True):
+    st.markdown(agent.startup_message())
+
+# Controls
+c1, c2 = st.columns([1, 1])
+with c1:
+    uploaded = st.file_uploader("Upload semicolon-delimited CSV", type=["csv"])
+with c2:
+    reset = st.button("Reset")
+
+if reset:
+    st.session_state.clear()
+    st.rerun()
+
+if uploaded is not None and st.session_state.df is None:
     try:
-        client = genai.Client(api_key=API_KEY)
+        st.session_state.df = agent.parse_csv_semicolon(uploaded)
+        st.info("File parsed successfully. Click **Confirm & Analyze** to proceed.")
     except Exception as e:
-        st.error(f"Error initializing Gemini client: {e}")
-        client = None
-else:
-    client = None
+        st.error(f"Parsing failed: {e}")
 
-MODEL_NAME = 'gemini-2.5-flash-preview-09-2025'
-SYSTEM_INSTRUCTION = "You are a concise, helpful, and friendly chat assistant optimized for Streamlit apps. Keep your answers brief."
+confirm = st.button("✅ Confirm & Analyze", type="primary", disabled=(st.session_state.df is None))
+if confirm:
+    st.session_state.confirmed = True
 
-# --- Session State Management ---
+if not st.session_state.confirmed:
+    st.stop()
 
-if "chat_history" not in st.session_state:
-    # Initialize chat history with the system instruction
-    # FIXED: Using types.Part(text=...) instead of the from_text class method for robustness.
-    st.session_state.chat_history = [
-        types.Content(
-            role="model", 
-            parts=[types.Part(text="Hello! I'm your minimal Streamlit Gemini Assistant. How can I help you today?")]
-        )
-    ]
+# ---------------- Analysis ----------------
+df = st.session_state.df
+df_name = uploaded.name if uploaded else "DataFrame"
 
-# --- Core Functions ---
+st.subheader("Dataset Overview")
+st.write(f"**Source:** {df_name} • **Rows:** {len(df):,} • **Columns:** {df.shape[1]:,}")
+st.dataframe(df.head(15), use_container_width=True)
 
-def send_message(prompt):
-    """Handles sending the user message and getting a response from Gemini."""
-    if not client:
-        return # Skip if client failed to initialize
+candidate_cols = agent.select_numeric_columns(df, k=cfg.top_k_metrics)
+if not candidate_cols:
+    st.error("No numeric columns detected. Please provide a dataset with numeric measures.")
+    st.stop()
 
-    # 1. Add user message to history
-    st.session_state.chat_history.append(
-        types.Content(role="user", parts=[types.Part(text=prompt)]) # FIX applied here
-    )
-    
-    # 2. Configure the API call
-    # We pass the full history (excluding the first model message for context)
-    # The system instruction is handled by the client configuration, not in the chat history.
-    contents_to_send = st.session_state.chat_history
-    
-    try:
-        # 3. Call the Gemini API
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=contents_to_send,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION
-            )
-        )
+st.subheader("Selected Metrics")
+st.caption("Automatically selected by completeness and variance (top 4). You can adjust below.")
+user_cols = st.multiselect(
+    "Metrics to analyze",
+    options=[c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])],
+    default=candidate_cols,
+    max_selections=6
+)
+if not user_cols:
+    st.warning("Please select at least one numeric column to continue.")
+    st.stop()
 
-        # 4. Extract text and add model response to history
-        model_text = response.text
-        st.session_state.chat_history.append(
-            types.Content(role="model", parts=[types.Part(text=model_text)]) # FIX applied here
-        )
-        
-    except Exception as e:
-        error_message = f"Error: Could not get response from Gemini. ({e})"
-        st.session_state.chat_history.append(
-            types.Content(role="model", parts=[types.Part(text=error_message)]) # FIX applied here
-        )
-        st.error(error_message)
+stats = agent.compute_stats(df, user_cols)
 
+st.markdown("### Structured Summary (Top Metrics)")
+st.markdown(agent.structured_summary(stats, limit=4))
 
-# --- Streamlit UI Layout ---
-
-st.set_page_config(page_title="Lean Streamlit Chat", layout="centered")
-st.title("💬 Lean Gemini Streamlit Chat")
-
-# Display chat messages from history
-for message in st.session_state.chat_history:
-    # Exclude the system instruction that was used to initialize the history
-    if message.role != "user" and message.parts[0].text.startswith("Hello! I'm your minimal Streamlit Gemini Assistant"):
-        # Display the first welcome message
-        with st.chat_message("assistant"):
-            st.write(message.parts[0].text)
-        continue
-
-    if message.role == "user":
-        # Streamlit handles the 'user' role
-        with st.chat_message("user"):
-            st.write(message.parts[0].text)
+# Optional Gemini executive summary (no visuals)
+with st.expander("✨ Executive Summary (Gemini — optional)", expanded=False):
+    if cfg.use_gemini:
+        text = agent.polished_summary_with_gemini(df, user_cols[:4], {c: stats[c] for c in user_cols[:4]})
+        st.write(text)
     else:
-        # Streamlit handles the 'model' role as 'assistant'
-        with st.chat_message("assistant"):
-            st.write(message.parts[0].text)
+        st.info("Set GOOGLE_API_KEY in the environment to enable Gemini.")
 
+# Download (Markdown)
+import datetime as dt
+ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+md = [
+    "# Vehicle Data Assist1 Report",
+    f"**Generated:** {ts}",
+    f"**Source:** {df_name}",
+    "## Top Metrics (Structured)",
+    agent.structured_summary({c: stats[c] for c in user_cols}, limit=4),
+]
+report_md = "\n\n".join(md)
+st.download_button(
+    "⬇️ Download report (Markdown)",
+    data=report_md.encode("utf-8"),
+    file_name="vehicle_data_assist1_report.md",
+    mime="text/markdown",
+)
 
-# Input text box for the user
-if prompt := st.chat_input("Say something..."):
-    send_message(prompt)
+st.caption("End of analysis. Upload a new file or adjust metric selection to update results.")
