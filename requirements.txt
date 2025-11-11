@@ -1,7 +1,6 @@
 streamlit
-google-genai
-langchain-google-genai
 pandas
 numpy
 langchain
-langchain-core
+google-genai==0.17.0
+langchain-google-genai
