@@ -1,4 +1,7 @@
 streamlit
-pandas
-langchain-google-genai
 google-genai
+langchain-google-genai
+pandas
+numpy
+langchain
+langchain-core
