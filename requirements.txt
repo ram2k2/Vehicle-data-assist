@@ -1,6 +1,6 @@
+langchain
+langchain-google-genai
 streamlit
 pandas
-numpy
-langchain
-google-genai==0.17.0
-langchain-google-genai
+pyngrok
+matplotlib
