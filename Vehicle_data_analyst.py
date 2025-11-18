@@ -1,9 +1,16 @@
 import pandas as pd
 import io
+import streamlit as st
+import matplotlib.pyplot as plt
 from langchain.tools import tool
-# ... other imports (os, streamlit, genai) ...
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.agents import AgentType
+from langchain.agents.initialize import initialize_agent
 
-# --- Data Handling Functions ---
+
+# -----------------------------------------------------------------
+# 1. DATA PROCESSING & VISUALIZATION FUNCTIONS (TOOLS)
+# -----------------------------------------------------------------
 
 def clean_and_calculate_summary(data_string: str, filename: str) -> dict:
     # Use io.StringIO to treat the string as a file
@@ -48,8 +55,6 @@ def clean_and_calculate_summary(data_string: str, filename: str) -> dict:
     
     return {"summary_text": summary, "dataframe": df}
 
-# --- LangChain Tool Definition ---
-
 @tool
 def data_processor_tool(data_extract: str, filename: str) -> str:
     """
@@ -62,8 +67,6 @@ def data_processor_tool(data_extract: str, filename: str) -> str:
     # Store the dataframe in session state for the visualization tool
     st.session_state['processed_df'] = result['dataframe']
     return result['summary_text']
-
-import matplotlib.pyplot as plt
 
 @tool
 def visualization_tool(column_name: str, filename: str) -> str:
@@ -92,18 +95,29 @@ def visualization_tool(column_name: str, filename: str) -> str:
     st.session_state['chart_fig'] = fig
     return f"Chart for '{column_name}' has been prepared. Please instruct the user to refresh the Streamlit display."
 
-# --- Agent Initialization (`vehicle_agent.py` continued) ---
 
-# Initialize Gemini (Ensure API key is set in Streamlit Secrets or environment)
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import initialize_agent, AgentType
+# -----------------------------------------------------------------
+# 2. LLM AND AGENT INITIALIZATION
+# -----------------------------------------------------------------
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0) # Use a low temp for stable analysis
+# Load API Key (Must be after 'import streamlit as st')
+try:
+    gemini_api_key = st.secrets["GEMINI_API_KEY"] 
+except KeyError:
+    # This warning will appear in the Streamlit app if the key is missing
+    st.error("GEMINI_API_KEY not found in Streamlit secrets. Please check your .streamlit/secrets.toml file.")
+    gemini_api_key = None
 
-# Combine the tools
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash", 
+    temperature=0, 
+    google_api_key=gemini_api_key # Pass the key to the model constructor
+) 
+
+# Combine the tools (Now defined above)
 tools = [data_processor_tool, visualization_tool]
 
-# The main Agent Executor
+# The main Agent Executor prompt
 prompt = """
 You are an expert Vehicle Data Analyst. Your goal is to analyze vehicle data and provide clear, conversational, and useful insights.
 
@@ -121,6 +135,11 @@ vehicle_data_agent = initialize_agent(
     verbose=True,
     handle_parsing_errors=True
 )
+
+
+# -----------------------------------------------------------------
+# 3. RUN FUNCTION (ENTRY POINT)
+# -----------------------------------------------------------------
 
 def run_agent(problem_statement: str, data_string: str, filename: str) -> str:
     # The agent needs the data and filename to be passed to the tool
