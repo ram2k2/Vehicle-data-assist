@@ -4,8 +4,9 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from langchain.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents.agent_types import AgentType
-from langchain.agents.initialize import initialize_agent
+# New/Correct Agent Imports for Modern LangChain:
+from langchain_core.agents import AgentType  # Use langchain_core for AgentType
+from langchain.agents import initialize_agent  # initialize_agent is often back at the root
 
 
 # -----------------------------------------------------------------
