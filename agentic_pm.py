@@ -94,11 +94,12 @@ pm_graph = graph_builder.compile()
 
 # 6. Run the Graph
 
-def run_pm_agent(problem_statement: str, filename: str = "uploaded_data.csv", follow_up: str = None):
+def run_pm_agent(problem_statement: str, filename: str = "uploaded_data.csv", csv_content: str = "", follow_up: str = None):
     print("\n Running Vehicle Data Analyst for:", problem_statement)
     state = {
         "input": problem_statement,
         "filename": filename,
+        "csv_content": csv_content,
     }
     if follow_up:
         state["user_input"] = follow_up
