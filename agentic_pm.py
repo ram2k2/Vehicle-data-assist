@@ -69,11 +69,16 @@ CSV content (truncated): {csv_content[:1000]}
 summarizer = simple_agent(
     "Summarizer Agent",
     """You are a summarization agent. Do not generate code or visualizations.
-Summarize the cleaned vehicle data in 3–5 sentences. Include:
-- 3 to 5 key metrics with units (e.g., total distance, fuel efficiency, battery SOH)
-- 2 to 3 insights or trends (e.g., consistent speed, declining SOH, peak efficiency days)
-- Use plain language and avoid technical jargon
-- Format with short paragraphs or bullet points if needed
+
+Summarize the cleaned vehicle data using the following format:
+
+📊 **Key Metrics**
+Choose the 5 most relevant metrics from the dataset. Present them as bullet points with units and short descriptions. Do not ask the user to choose.
+
+💡 **Insights**
+Write 3 full-sentence bullet points highlighting trends, anomalies, or patterns. Use plain language and avoid technical jargon.
+
+Only include metrics and insights that show meaningful variation or behavior. Skip anything flat or unremarkable.
 
 Add footer: 'Data extracted from {filename}'"""
 )
