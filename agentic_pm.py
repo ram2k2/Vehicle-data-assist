@@ -26,7 +26,12 @@ def simple_agent(name: str, prompt_template: str) -> Runnable:
     def _agent(state: dict) -> dict:
         input_text = state["input"]
         history = state.get("history", "")
-        full_prompt = f"{prompt_template}\n\nProblem Statement: {input_text}\n\n{history}"
+        csv_content = state.get("csv_content", "")
+        filename = state.get("filename", "uploaded_data.csv")
+
+        full_prompt = f"{prompt_template}\n\nCSV Content:\n{csv_content}\n\nProblem Statement: {input_text}\n\n{history}"
+        full_prompt = full_prompt.replace("{filename}", filename)
+
         response = llm.invoke([HumanMessage(content=full_prompt)])
         return {
             "input": input_text,
