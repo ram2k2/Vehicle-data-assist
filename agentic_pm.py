@@ -73,12 +73,13 @@ summarizer = simple_agent(
 Summarize the cleaned vehicle data using the following format:
 
 📊 **Key Metrics**
-Choose the 5 most relevant metrics from the dataset. Present them as bullet points with units and short descriptions. Do not ask the user to choose.
+Choose the 5 most relevant metrics from the dataset. Present them as short bullet points with units — no full sentences. Example:
+- Metric Name: Value or Range
 
 💡 **Insights**
 Write 3 full-sentence bullet points highlighting trends, anomalies, or patterns. Use plain language and avoid technical jargon.
 
-Only include metrics and insights that show meaningful variation or behavior. Skip anything flat or unremarkable.
+Do not ask the user to choose metrics. Select what’s most meaningful based on the data. Only include metrics and insights that show variation or behavior worth noting.
 
 Add footer: 'Data extracted from {filename}'"""
 )
