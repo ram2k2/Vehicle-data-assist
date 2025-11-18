@@ -6,25 +6,22 @@ from langchain_core.messages import HumanMessage
 
 # 1. Setup Gemini API Key
 try:
-    # Safely retrieve the Gemini API key from Streamlit secrets
     gemini_api_key = st.secrets["GEMINI_API_KEY"]
 except KeyError:
-    # Handle the missing key gracefully
     st.error("GEMINI_API_KEY not found in Streamlit secrets.")
     gemini_api_key = None
-    
-# 2. Initialize LLM (Using Gemini)
+
+# 2. Initialize LLM
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash", 
-    temperature=0, 
+    model="gemini-2.5-flash",
+    temperature=0,
     google_api_key=gemini_api_key
 )
 
-# 3. Agent Helper Functions
-
+# 3. Agent Helper
 def simple_agent(name: str, prompt_template: str) -> Runnable:
     def _agent(state: dict) -> dict:
-        input_text = state["input"]
+        input_text = state.get("input", "")
         history = state.get("history", "")
         csv_content = state.get("csv_content", "")
         filename = state.get("filename", "uploaded_data.csv")
@@ -40,20 +37,35 @@ def simple_agent(name: str, prompt_template: str) -> Runnable:
         }
     return _agent
 
-# 4. Define All Agents
+# 4. Chief Agent
+def chief_agent(state: dict) -> dict:
+    input_text = state.get("input", "")
+    csv_content = state.get("csv_content", "")
 
-data_preprocessor = simple_agent(
-    "Data Preprocessor Agent",
-    """Parse the uploaded CSV using ';' as delimiter. Clean invalid entries ("NV", "NA", empty).
-Extract and calculate:
-- Total Distance = last - first value of "Total distance (km)"
-- Average Fuel Efficiency = mean of "Fuel efficiency"
-- Latest Battery SOH = last value of "High voltage battery State of Health (SOH)."
-- Average Vehicle Speed = mean of "Current vehicle speed."
+    decision_prompt = f"""
+You are the Chief Agent. Based on the user's request and the CSV content, decide which of the following agents should be invoked:
 
-Return a structured summary with bold formatting and units. Add footer: 'Data extracted from {filename}'."""
-)
+- "summarizer"
+- "insight_generator"
+- "question_generator"
+- "visualization_agent"
 
+Only return the agent name(s) as a comma-separated list. Do not explain.
+
+User input: {input_text}
+CSV content (truncated): {csv_content[:1000]}
+"""
+
+    response = llm.invoke([HumanMessage(content=decision_prompt)])
+    selected_agents = response.content.strip().split(",")
+    next_agent = selected_agents[0].strip()
+
+    return {
+        **state,
+        "next_agent": next_agent
+    }
+
+# 5. Define Agents
 summarizer = simple_agent(
     "Summarizer Agent",
     """You are a summarization agent. Do not generate code or visualizations.
@@ -84,30 +96,33 @@ visualization_agent = simple_agent(
     "Generate visualizations for key metrics like distance, fuel efficiency, battery SOH, and speed. Add footer: 'Data extracted from {filename}'"
 )
 
-
-
-# 5. Build LangGraph
+# 6. Build LangGraph
 graph_builder = StateGraph(dict)
-graph_builder.set_entry_point("Data Preprocessor")
+graph_builder.set_entry_point("Chief Agent")
 
-graph_builder.add_node("Data Preprocessor", data_preprocessor)
+graph_builder.add_node("Chief Agent", chief_agent)
 graph_builder.add_node("Summarizer", summarizer)
 graph_builder.add_node("Insight Generator", insight_generator)
 graph_builder.add_node("Question Generator", question_generator)
 graph_builder.add_node("Visualization Agent", visualization_agent)
 
-graph_builder.add_edge("Data Preprocessor", "Summarizer")
-graph_builder.add_edge("Summarizer", "Insight Generator")
-graph_builder.add_edge("Insight Generator", "Question Generator")
-graph_builder.add_edge("Question Generator", "Visualization Agent")
+graph_builder.add_conditional_edges("Chief Agent", lambda state: state["next_agent"], {
+    "summarizer": "Summarizer",
+    "insight_generator": "Insight Generator",
+    "question_generator": "Question Generator",
+    "visualization_agent": "Visualization Agent"
+})
+
+graph_builder.add_edge("Summarizer", END)
+graph_builder.add_edge("Insight Generator", END)
+graph_builder.add_edge("Question Generator", END)
 graph_builder.add_edge("Visualization Agent", END)
 
 pm_graph = graph_builder.compile()
 
-# 6. Run the Graph
-
+# 7. Run the Graph
 def run_pm_agent(problem_statement: str, filename: str = "uploaded_data.csv", csv_content: str = "", follow_up: str = None):
-    print("\n Running Vehicle Data Analyst for:", problem_statement)
+    print("\nRunning Vehicle Data Analyst for:", problem_statement)
     state = {
         "input": problem_statement,
         "filename": filename,
@@ -117,6 +132,6 @@ def run_pm_agent(problem_statement: str, filename: str = "uploaded_data.csv", cs
         state["user_input"] = follow_up
 
     final_state = pm_graph.invoke(state)
-    print("\n Final Output:\n")
+    print("\nFinal Output:\n")
     print(final_state["output"])
     return final_state
