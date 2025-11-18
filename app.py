@@ -1,43 +1,28 @@
 # app.py
 import streamlit as st
-from Vehicle_data_analyst import run_agent
+from agentic_pm import run_pm_agent
 
-st.set_page_config(page_title="Vehicle Data Analyst", layout="wide")
+st.set_page_config(page_title="Agentic Product Manager", layout="wide")
 
-st.title("🚗 AI Vehicle Data Analyst")
-st.markdown("Upload a vehicle data CSV (semicolon-delimited) and ask for insights.")
+st.title("🧠 Agentic Product Manager")
+st.markdown("""
+Enter a product problem statement, and this AI-powered system will act like a seasoned Product Manager — breaking down the problem, analyzing the market, identifying competitors, writing PRDs, and more!
+""")
 
-# File Uploader
-uploaded_file = st.file_uploader("Upload CSV Data (Delimiter: ';')", type=["csv"])
+problem_input = st.text_area("📝 Problem Statement", placeholder="e.g. Improve onboarding for first-time EV users")
 
-if uploaded_file:
-    # Read file content
-    file_contents = uploaded_file.getvalue().decode("utf-8")
-    filename = uploaded_file.name
+if st.button("🚀 Run Agentic PM"):
+    if not problem_input.strip():
+        st.warning("Please enter a valid problem statement.")
+    else:
+        with st.spinner("Thinking like a PM..."):
+            
+            output = run_pm_agent(problem_input)
+            st.success("Agentic PM completed!")
 
-    # Text Input for the user's question
-    user_query = st.text_input(
-        "📝 Your Question for the Data:",
-        placeholder="e.g. Give me the full summary and suggest some insights."
-    )
-    
-    if st.button("Analyze Data"):
-        if not user_query.strip():
-            st.warning("Please enter a question.")
-        else:
-            # Clear previous chart
-            if 'chart_fig' in st.session_state:
-                del st.session_state['chart_fig']
-                
-            with st.spinner("Analyzing data and generating insights..."):
-                # Run the agent
-                response = run_agent(user_query, file_contents, filename)
-                
-                st.success("Analysis Complete!")
-                st.subheader("💡 Agent Response")
-                st.markdown(response)
-
-            # Check if the visualization tool prepared a chart
-            if 'chart_fig' in st.session_state:
-                st.subheader("📊 Visualization")
-                st.pyplot(st.session_state['chart_fig'])
+            # Expandable section for entire trace
+            with st.expander("🧠 Full PM Thought Process"):
+                st.text(output["history"])
+            
+            st.subheader("📋 Final Output")
+            st.markdown(output["output"])
