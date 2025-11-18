@@ -2,27 +2,44 @@
 import streamlit as st
 from agentic_pm import run_pm_agent
 
-st.set_page_config(page_title="Agentic Product Manager", layout="wide")
+st.set_page_config(page_title="Vehicle Data Assist", layout="wide")
 
-st.title("🧠 Agentic Product Manager")
+st.title("🧠 Vehicle Data Assist")
 st.markdown("""
-Enter a product problem statement, and this AI-powered system will act like a seasoned Product Manager — breaking down the problem, analyzing the market, identifying competitors, writing PRDs, and more!
+Upload a vehicle data CSV and enter a problem statement. This AI-powered system will analyze the data, generate insights, and suggest follow-up questions!
 """)
 
-problem_input = st.text_area("📝 Problem Statement", placeholder="e.g. Improve onboarding for first-time EV users")
+# File upload
+filename = ""
+csv_content = ""
+uploaded_file = st.file_uploader("Upload vehicle data CSV", type=["csv"])
+if uploaded_file:
+    csv_content = uploaded_file.read().decode("utf-8")
+    filename = uploaded_file.name
 
-if st.button("🚀 Run Agentic PM"):
+# Problem input
+problem_input = st.text_area("📝 Problem Statement", placeholder="e.g. Analyze driving behavior over the past month")
+
+# Run button
+if st.button("🚀 Run Vehicle Data Assist"):
     if not problem_input.strip():
         st.warning("Please enter a valid problem statement.")
+    elif not csv_content:
+        st.warning("Please upload a CSV file.")
     else:
-        with st.spinner("Thinking like a PM..."):
-            
-            output = run_pm_agent(problem_input)
-            st.success("Agentic PM completed!")
+        with st.spinner("Analyzing vehicle data..."):
+            output = run_pm_agent(problem_input, filename=filename, csv_content=csv_content)
+            st.success("Analysis complete!")
 
-            # Expandable section for entire trace
-            with st.expander("🧠 Full PM Thought Process"):
-                st.text(output["history"])
-            
             st.subheader("📋 Final Output")
             st.markdown(output["output"])
+
+            with st.expander("🧠 Full Thought Process"):
+                st.text(output["history"])
+
+# Follow-up input
+follow_up = st.chat_input("Ask a follow-up question")
+if follow_up and problem_input and csv_content:
+    output = run_pm_agent(problem_input, filename=filename, csv_content=csv_content, follow_up=follow_up)
+    st.markdown("### 🤖 Follow-Up Response")
+    st.markdown(output["output"])
