@@ -13,15 +13,21 @@ from langchain.agents.agent_types import AgentType
 from langchain_community.utilities import WikipediaAPIWrapper
 from dotenv import load_dotenv
 
-# 1. Setup Groq API Key
-# os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
-# load_dotenv()
-# genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-groq_api_key = st.secrets["GROQ_API_KEY"]
-
-# 2. Initialize Gemini LLM
-llm = ChatGroq(model="Llama3-70b-8192",groq_api_key=groq_api_key)
-# llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+# 1. Setup Gemini API Key
+try:
+    # Safely retrieve the Gemini API key from Streamlit secrets
+    gemini_api_key = st.secrets["GEMINI_API_KEY"]
+except KeyError:
+    # Handle the missing key gracefully
+    st.error("GEMINI_API_KEY not found in Streamlit secrets.")
+    gemini_api_key = None
+    
+# 2. Initialize LLM (Using Gemini)
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash", 
+    temperature=0, 
+    google_api_key=gemini_api_key
+)
 
 # 3. Agent Helper Functions
 
