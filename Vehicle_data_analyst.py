@@ -5,8 +5,7 @@ import matplotlib.pyplot as plt
 from langchain.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 # New/Correct Agent Imports for Modern LangChain:
-from langchain_core.agents import AgentType  # Use langchain_core for AgentType
-from langchain.agents import initialize_agent  # initialize_agent is often back at the root
+from langchain.agents import initialize_agent, AgentType  
 
 
 # -----------------------------------------------------------------
