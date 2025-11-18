@@ -20,22 +20,17 @@ if uploaded_file:
 # Problem input
 problem_input = st.text_area("📝 Problem Statement", placeholder="e.g. Analyze driving behavior over the past month")
 
-# Run button
-if st.button("🚀 Run Vehicle Data Assist"):
-    if not problem_input.strip():
-        st.warning("Please enter a valid problem statement.")
-    elif not csv_content:
-        st.warning("Please upload a CSV file.")
-    else:
-        with st.spinner("Analyzing vehicle data..."):
-            output = run_pm_agent(problem_input, filename=filename, csv_content=csv_content)
-            st.success("Analysis complete!")
+# Auto-run when both file and input are present
+if problem_input.strip() and csv_content:
+    with st.spinner("Analyzing vehicle data..."):
+        output = run_pm_agent(problem_input, filename=filename, csv_content=csv_content)
+        st.success("Analysis complete!")
 
-            st.subheader("📋 Final Output")
-            st.markdown(output["output"])
+        st.subheader("📋 Final Output")
+        st.markdown(output["output"])
 
-            with st.expander("🧠 Full Thought Process"):
-                st.text(output["history"])
+        with st.expander("🧠 Full Thought Process"):
+            st.text(output["history"])
 
 # Follow-up input
 follow_up = st.chat_input("Ask a follow-up question")
