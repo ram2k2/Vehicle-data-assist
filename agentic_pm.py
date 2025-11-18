@@ -1,3 +1,4 @@
+print("✅ vehicle_data_analyst module loaded")
 import streamlit as st
 from langchain_core.runnables import Runnable
 from langgraph.graph import END, StateGraph
