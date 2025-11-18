@@ -1,6 +1,6 @@
 # app.py
 import streamlit as st
-from vehicle_agent import run_agent
+from vehicle_data_analyst import run_agent
 
 st.set_page_config(page_title="Vehicle Data Analyst", layout="wide")
 
