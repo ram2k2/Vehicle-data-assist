@@ -1,17 +1,8 @@
-import os
 import streamlit as st
 from langchain_core.runnables import Runnable
 from langgraph.graph import END, StateGraph
-from langchain_groq import ChatGroq
-import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
-from langchain.tools import DuckDuckGoSearchRun
-from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
-from langchain.agents import Tool, initialize_agent, AgentExecutor
-from langchain.agents.agent_types import AgentType
-from langchain_community.utilities import WikipediaAPIWrapper
-from dotenv import load_dotenv
 
 # 1. Setup Gemini API Key
 try:
