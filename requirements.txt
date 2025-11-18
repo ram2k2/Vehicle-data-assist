@@ -1,8 +1,9 @@
 langchain
-langchain-google-genai
 streamlit
 pandas
 pyngrok
 matplotlib
 langchain_community
 google-generativeai
+langchain-core>=0.1.0  # Ensure you have a modern version of the core library
+langchain-google-genai>=0.1.0  # Crucial: This must be the latest version
