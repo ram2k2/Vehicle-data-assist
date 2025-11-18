@@ -1,6 +1,6 @@
 # app.py
 import streamlit as st
-from vehicle_data_analyst import run_pm_agent
+from agentic_pm import run_pm_agent
 
 st.set_page_config(page_title="Agentic Product Manager", layout="wide")
 
