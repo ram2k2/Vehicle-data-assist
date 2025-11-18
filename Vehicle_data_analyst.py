@@ -1,156 +1,102 @@
-import pandas as pd
-import io
+import os
 import streamlit as st
-import matplotlib.pyplot as plt
-from langchain.tools import tool
+from langchain_core.runnables import Runnable
+from langgraph.graph import END, StateGraph
+from langchain_groq import ChatGroq
+import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import initialize_agent, AgentExecutor
+from langchain_core.messages import HumanMessage
+from langchain.tools import DuckDuckGoSearchRun
+from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
+from langchain.agents import Tool, initialize_agent, AgentExecutor
 from langchain.agents.agent_types import AgentType
+from langchain_community.utilities import WikipediaAPIWrapper
+from dotenv import load_dotenv
 
+# 1. Setup Groq API Key
+# os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+# load_dotenv()
+# genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+groq_api_key = st.secrets["GROQ_API_KEY"]
 
-# -----------------------------------------------------------------
-# 1. DATA PROCESSING & VISUALIZATION FUNCTIONS (TOOLS)
-# -----------------------------------------------------------------
+# 2. Initialize Gemini LLM
+llm = ChatGroq(model="Llama3-70b-8192",groq_api_key=groq_api_key)
+# llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
 
-def clean_and_calculate_summary(data_string: str, filename: str) -> dict:
-    # Use io.StringIO to treat the string as a file
-    data_io = io.StringIO(data_string)
-    # Manual parsing: read CSV, explicitly using ';' as delimiter
-    df = pd.read_csv(data_io, sep=';', skipinitialspace=True)
-    
-    # Define columns to process
-    cols_to_clean = ["Total distance (km)", "Fuel efficiency", 
-                     "High voltage battery State of Health (SOH)", "Current vehicle speed"]
-    
-    clean_data = {}
-    
-    for col in cols_to_clean:
-        # Convert to numeric, errors='coerce' turns "NV", "NA", etc. into NaN
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-        # Drop rows where the value is NaN for this specific calculation
-        clean_values = df[col].dropna()
-        clean_data[col] = clean_values
+# 3. Agent Helper Functions
 
-    # 1. Total Distance
-    total_distance = (clean_data["Total distance (km)"].iloc[-1] - 
-                      clean_data["Total distance (km)"].iloc[0]) if not clean_data["Total distance (km)"].empty else 0
+def simple_agent(name: str, prompt_template: str) -> Runnable:
+    def _agent(state: dict) -> dict:
+        input_text = state["input"]
+        history = state.get("history", "")
+        full_prompt = f"{prompt_template}\n\nProblem Statement: {input_text}\n\n{history}"
+        response = llm.invoke([HumanMessage(content=full_prompt)])
+        return {
+            "input": input_text,
+            "history": history + f"\n\n[{name}]\n{response.content}",
+            "output": response.content,
+        }
+    return _agent
 
-    # 2. Average Fuel Efficiency
-    avg_fuel_efficiency = clean_data["Fuel efficiency"].mean()
-    
-    # 3. Latest Battery SOH
-    latest_soh = clean_data["High voltage battery State of Health (SOH)"].iloc[-1] if not clean_data["High voltage battery State of Health (SOH)"].empty else "N/A"
-    
-    # 4. Average Vehicle Speed
-    avg_speed = clean_data["Current vehicle speed"].mean()
+# 4. Define All Agents
 
-    # --- Structured Output ---
-    summary = f"""
-**Vehicle Data Summary (from {filename}):**
-* **Total Trip Distance:** **{total_distance:.2f} km**
-* **Average Fuel Efficiency:** **{avg_fuel_efficiency:.2f} L/100km**
-* **Latest Battery SOH:** **{latest_soh}%**
-* **Average Vehicle Speed:** **{avg_speed:.2f} km/h**
-"""
-    
-    return {"summary_text": summary, "dataframe": df}
-
-@tool
-def data_processor_tool(data_extract: str, filename: str) -> str:
-    """
-    Analyzes a raw CSV string of vehicle data.
-    It cleans the data (removes 'NV', 'NA', empty strings), calculates total distance, 
-    average fuel efficiency, latest battery SOH, and average speed. 
-    Returns the structured text summary for the LLM to use.
-    """
-    result = clean_and_calculate_summary(data_extract, filename)
-    # Store the dataframe in session state for the visualization tool
-    st.session_state['processed_df'] = result['dataframe']
-    return result['summary_text']
-
-@tool
-def visualization_tool(column_name: str, filename: str) -> str:
-    """
-    Creates a time-series plot (or distribution) for a specified column from the data.
-    It saves the chart as an image and returns a path/placeholder for the Streamlit app to display.
-    Only call this tool when the user asks for a chart or graph.
-    """
-    if 'processed_df' not in st.session_state:
-        return "Error: Data has not been processed yet. Run the summary first."
-
-    df = st.session_state['processed_df']
-    
-    # Check if column exists and is numeric
-    if column_name not in df.columns or not pd.api.types.is_numeric_dtype(df[column_name]):
-        return f"Error: Cannot visualize '{column_name}'. It may not exist or is not numeric."
-    
-    # Simple Plot
-    fig, ax = plt.subplots(figsize=(10, 4))
-    df[column_name].plot(ax=ax, title=f'{column_name} Over Time')
-    plt.xlabel('Time Step')
-    plt.ylabel(column_name)
-    plt.tight_layout()
-    
-    # Save the figure to a buffer and return a placeholder name
-    st.session_state['chart_fig'] = fig
-    return f"Chart for '{column_name}' has been prepared. Please instruct the user to refresh the Streamlit display."
-
-
-# -----------------------------------------------------------------
-# 2. LLM AND AGENT INITIALIZATION
-# -----------------------------------------------------------------
-
-# Load API Key (Must be after 'import streamlit as st')
-try:
-    gemini_api_key = st.secrets["GEMINI_API_KEY"] 
-except KeyError:
-    # This warning will appear in the Streamlit app if the key is missing
-    st.error("GEMINI_API_KEY not found in Streamlit secrets. Please check your .streamlit/secrets.toml file.")
-    gemini_api_key = None
-
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash", 
-    temperature=0, 
-    google_api_key=gemini_api_key # Pass the key to the model constructor
-) 
-
-# Combine the tools (Now defined above)
-tools = [data_processor_tool, visualization_tool]
-
-# The main Agent Executor prompt
-prompt = """
-You are an expert Vehicle Data Analyst. Your goal is to analyze vehicle data and provide clear, conversational, and useful insights.
-
-1. **ALWAYS** start by using the `data_processor_tool` to get the summary statistics and clean the data.
-2. After presenting the summary, **ALWAYS** suggest 2-3 new, insightful questions the user could ask based on the data provided.
-3. If the user asks for a chart or visualization, use the `visualization_tool`.
-4. **ALWAYS** add the footer: "Data extracted from (filename)" to your final response.
-"""
-
-# Initialize the Agent
-vehicle_data_agent = initialize_agent(
-    tools=tools,
-    llm=llm,
-    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-    verbose=True,
-    handle_parsing_errors=True
+problem_framer = simple_agent(
+    "Problem Framer Agent",
+    "Break the problem down into user impact, business goals, and tech implications. Format it as bullet points. Entire output should be within 500 words."
 )
 
+market_analyst = simple_agent(
+    "Market Analyst Agent",
+    "Search the web to identify relevant market trends, user behavior patterns, and industry stats. Entire output should be within 500 words."
+)
 
-# -----------------------------------------------------------------
-# 3. RUN FUNCTION (ENTRY POINT)
-# -----------------------------------------------------------------
+competitor_scout = simple_agent(
+    "Competitor Scout Agent",
+    "Search the web to find top competitors and their features, pricing, and differentiation. Summarize insights. Entire output should be within 500 words."
+)
 
-def run_agent(problem_statement: str, data_string: str, filename: str) -> str:
-    # The agent needs the data and filename to be passed to the tool
-    # We embed the data and filename into the prompt for the agent to use the tool
-    full_prompt = (
-        f"{prompt}\n\n"
-        f"DATA_EXTRACT_CSV_STRING:\n---\n{data_string}\n---\n"
-        f"FILENAME: {filename}\n\n"
-        f"USER_REQUEST: {problem_statement}"
-    )
-    
-    response = vehicle_data_agent.run(full_prompt)
-    
-    return response
+solution_designer = simple_agent(
+    "Solution Designer Agent",
+    "Based on previous insights, suggest 2 product solutions with clear MVP scope. Entire output should be within 500 words."
+)
+
+prioritization_planner = simple_agent(
+    "Prioritization Planner Agent",
+    "Prioritize the features using RICE scoring and propose a phased roadmap: MVP and V1. Entire output should be within 500 words."
+)
+
+prd_writer = simple_agent(
+    "PRD Writer Agent",
+    "Write a Product Requirements Document with Overview, Objectives, Features, User Stories, and KPIs. Summarize the PRD within 1000 words."
+)
+
+# 5. Build LangGraph
+
+graph_builder = StateGraph(dict)
+graph_builder.set_entry_point("Problem Framer")
+
+graph_builder.add_node("Problem Framer", problem_framer)
+graph_builder.add_node("Market Analyst", market_analyst)
+graph_builder.add_node("Competitor Scout", competitor_scout)
+graph_builder.add_node("Solution Designer", solution_designer)
+graph_builder.add_node("Prioritization Planner", prioritization_planner)
+graph_builder.add_node("PRD Writer", prd_writer)
+
+graph_builder.add_edge("Problem Framer", "Market Analyst")
+graph_builder.add_edge("Market Analyst", "Competitor Scout")
+graph_builder.add_edge("Competitor Scout", "Solution Designer")
+graph_builder.add_edge("Solution Designer", "Prioritization Planner")
+graph_builder.add_edge("Prioritization Planner", "PRD Writer")
+graph_builder.add_edge("PRD Writer", END)
+
+pm_graph = graph_builder.compile()
+
+# 6. Run the Graph
+
+def run_pm_agent(problem_statement: str):
+    print("\n Running Agentic PM for:", problem_statement)
+    final_state = pm_graph.invoke({"input": problem_statement})
+    print("\n Final Output:\n")
+    print(final_state["output"])
+
+    return final_state
