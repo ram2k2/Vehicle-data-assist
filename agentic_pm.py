@@ -56,7 +56,13 @@ Return a structured summary with bold formatting and units. Add footer: 'Data ex
 
 summarizer = simple_agent(
     "Summarizer Agent",
-    "Summarize the cleaned vehicle data in a structured format. Highlight key metrics and trends. Add footer: 'Data extracted from {filename}'"
+    """Summarize the cleaned vehicle data in 3–5 sentences. Include:
+- 3 to 5 key metrics with units (e.g., total distance, fuel efficiency, battery SOH)
+- 2 to 3 insights or trends (e.g., consistent speed, declining SOH, peak efficiency days)
+- Use plain language and avoid technical jargon
+- Format with short paragraphs or bullet points if needed
+
+Add footer: 'Data extracted from {filename}'"""
 )
 
 insight_generator = simple_agent(
