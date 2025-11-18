@@ -4,7 +4,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from langchain.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import Tool, initialize_agent, AgentExecutor
+from langchain.agents import initialize_agent, AgentExecutor
 from langchain.agents.agent_types import AgentType
 
 
