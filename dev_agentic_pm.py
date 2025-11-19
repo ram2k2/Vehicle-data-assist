@@ -41,28 +41,33 @@ def simple_agent(name: str, prompt_template: str) -> Runnable:
 def chief_agent(state: dict) -> dict:
     input_text = state.get("input", "")
     csv_content = state.get("csv_content", "")
+    history = state.get("history", "")
 
     decision_prompt = f"""
 You are the Chief Agent. Based on the user's request and the CSV content, decide which of the following agents should be invoked:
 
-- "summarizer"
 - "insight_generator"
 - "question_generator"
 - "visualization_agent"
 
-Only return the agent name(s) as a comma-separated list. Do not explain.
+Only return one or more agent name(s) as a comma-separated list. Do not explain.
 
 User input: {input_text}
 CSV content (truncated): {csv_content[:1000]}
+History: {history[-1000:]}
 """
 
     response = llm.invoke([HumanMessage(content=decision_prompt)])
-    selected_agents = response.content.strip().split(",")
-    next_agent = selected_agents[0].strip()
+    next_agent = response.content.strip()
+
+    valid = ["Insight Generator", "Question Generator", "Visualization Agent"]
+    if next_agent not in valid:
+        next_agent = "Question Generator"  # fallback
 
     return {
         **state,
         "next_agent": next_agent
+
     }
 
 # 5. Define Agents
@@ -113,18 +118,19 @@ graph_builder.set_entry_point("Data Preprocessor")
 
 graph_builder.add_node("Data Preprocessor", data_preprocessor)
 graph_builder.add_edge("Data Preprocessor", "Summarizer")
-graph_builder.add_node("Summarizer", summarizer)
 
+graph_builder.add_node("Summarizer", summarizer)
 graph_builder.add_edge("Summarizer", "Chief Agent")
+
 graph_builder.add_node("Chief Agent", chief_agent)
 graph_builder.add_node("Insight Generator", insight_generator)
 graph_builder.add_node("Question Generator", question_generator)
 graph_builder.add_node("Visualization Agent", visualization_agent)
 
 graph_builder.add_conditional_edges("Chief Agent", lambda state: state["next_agent"], {
-    "insight_generator": "Insight Generator",
-    "question_generator": "Question Generator",
-    "visualization_agent": "Visualization Agent"
+    "Insight Generator": "Insight Generator",
+    "Question Generator": "Question Generator",
+    "Visualization Agent": "Visualization Agent"
 })
 
 graph_builder.add_edge("Insight Generator", END)
