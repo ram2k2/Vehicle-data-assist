@@ -122,7 +122,6 @@ graph_builder.add_node("Question Generator", question_generator)
 graph_builder.add_node("Visualization Agent", visualization_agent)
 
 graph_builder.add_conditional_edges("Chief Agent", lambda state: state["next_agent"], {
-    "summarizer": "Summarizer",
     "insight_generator": "Insight Generator",
     "question_generator": "Question Generator",
     "visualization_agent": "Visualization Agent"
