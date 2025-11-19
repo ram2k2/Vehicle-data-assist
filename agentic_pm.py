@@ -4,11 +4,11 @@ from langgraph.graph import END, StateGraph
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
-if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("Missing GOOGLE_API_KEY in secrets. Please add it in Streamlit settings.")
+if "GEMINI_API_KEY" not in st.secrets:
+    st.error("Missing GEMINI_API_KEY in secrets. Please add it in Streamlit settings.")
     st.stop()
 
-google_api_key = st.secrets["GOOGLE_API_KEY"]
+google_api_key = st.secrets["GEMINI_API_KEY"]
 
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.0-flash",
