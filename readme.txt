@@ -32,7 +32,9 @@ Usecases:
 - Provide visualizations also
 - use Gemini API key
 
+Lets change the flow again. First step, Upload-preprocessing-summariser-end. Then the agent should provide a button "Please click here for more insights" or "Enter your question in the field below". When user click the button-chief agent kicks in and as last time it can give the questions-eg: Given the observed decline in the High Voltage Battery SOH, would you like to visualize its trend over the entire period? Since fuel efficiency was stable but different driving modes were used, should we compare the average fuel efficiency when driving in 'Eco' mode versus 'Sport' mode? Can we explore if there's a correlation between the total distance driven (Odometer) and the decline in the High Voltage Battery SOH? How did other parameters like engine temperature or throttle position vary between 'Eco' and 'Sport' driving modes? but these questions should be clickable so that user can choose whichever he wants. Otherwise user will enter his own question: eg How many rows are there. Inthis case should we need any additional agent to respond to this, or?
 
 
 Advancements:
 - Work on multiple formats
+
