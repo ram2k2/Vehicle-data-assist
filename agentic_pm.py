@@ -27,7 +27,8 @@ def simple_agent(name: str, prompt_template: str) -> Runnable:
         filename = state.get("filename", "uploaded_data.csv")
 
         full_prompt = f"{prompt_template}\n\nCSV Content:\n{csv_content}\n\nProblem Statement: {input_text}\n\n{history}"
-        full_prompt = full_prompt.replace("{filename}", filename)
+        if state.get("user_input"):
+            full_prompt += f"\n\nFollow-up Question: {state['user_input']}"
 
         response = llm.invoke([HumanMessage(content=full_prompt)])
         return {
@@ -138,6 +139,9 @@ def run_pm_agent(problem_statement: str, filename: str = "uploaded_data.csv", cs
         state["user_input"] = follow_up
 
     final_state = pm_graph.invoke(state)
+    question_display = follow_up if follow_up else problem_statement
+    final_state["output"] = f"**Your Question:** {question_display}\n\n**Agent Response:**\n{final_state['output']}"
+
     print("\nFinal Output:\n")
     print(final_state["output"])
     return final_state
