@@ -115,13 +115,14 @@ visualization_agent = simple_agent(
 # 6. Build LangGraph
 graph_builder = StateGraph(dict)
 graph_builder.set_entry_point("Data Preprocessor")
-
 graph_builder.add_node("Data Preprocessor", data_preprocessor)
 graph_builder.add_edge("Data Preprocessor", "Summarizer")
-
 graph_builder.add_node("Summarizer", summarizer)
-graph_builder.add_edge("Summarizer", "Chief Agent")
 
+# Summarizer ends the initial flow
+graph_builder.add_edge("Summarizer", END)
+
+# Interactive agents
 graph_builder.add_node("Chief Agent", chief_agent)
 graph_builder.add_node("Insight Generator", insight_generator)
 graph_builder.add_node("Question Generator", question_generator)
