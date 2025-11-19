@@ -1,18 +1,21 @@
 # agentic_pm.py
 import streamlit as st
 from langgraph.graph import END, StateGraph
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
-# Load API key
-groq_api_key = st.secrets["GROQ_API_KEY"]
+if "GOOGLE_API_KEY" not in st.secrets:
+    st.error("Missing GOOGLE_API_KEY in secrets. Please add it in Streamlit settings.")
+    st.stop()
 
-# Initialize LLM
-llm = ChatGroq(model="Llama3-70b-8192", groq_api_key=groq_api_key)
+google_api_key = st.secrets["GOOGLE_API_KEY"]
 
-# -------------------------------
-# 1. Simple Agent Factory
-# -------------------------------
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash",
+    temperature=0,
+    google_api_key=google_api_key
+)
+
 def simple_agent(name: str, prompt_template: str):
     def _agent(state: dict):
         input_text = state["input"]
@@ -26,9 +29,6 @@ def simple_agent(name: str, prompt_template: str):
         }
     return _agent
 
-# -------------------------------
-# 2. Define Nodes
-# -------------------------------
 problem_framer = simple_agent(
     "Problem Framer Agent",
     "Break the problem down into user impact, business goals, and tech implications. Format as bullet points."
@@ -59,9 +59,7 @@ prd_writer = simple_agent(
     "Write a concise PRD with Overview, Objectives, Features, and KPIs."
 )
 
-# -------------------------------
-# 3. Build LangGraph
-# -------------------------------
+# 5. Build LangGraph
 graph_builder = StateGraph(dict)
 graph_builder.set_entry_point("Problem Framer")
 
@@ -81,9 +79,7 @@ graph_builder.add_edge("PRD Writer", END)
 
 pm_graph = graph_builder.compile()
 
-# -------------------------------
-# 4. Run Agent
-# -------------------------------
+# 6. Run Agent
 def run_pm_agent(problem_statement: str, filename=None, csv_content=None, follow_up=None):
     if follow_up:
         # Direct LLM response for follow-up
