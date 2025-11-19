@@ -34,6 +34,26 @@ if uploaded_file:
         with st.expander("🧠 Full Thought Process"):
             st.text(output["history"])
 
+st.markdown("### 🔍 Want to explore more?")
+col1, col2 = st.columns([1, 2])
+with col1:
+    if st.button("Click here for more insights"):
+        output = run_pm_agent("more insights", filename=st.session_state.filename, csv_content=st.session_state.csv_content)
+        st.markdown(output["output"])
+
+        import re
+        st.session_state.suggested_questions = re.findall(r"- (.+)", output["output"])
+
+        for q in st.session_state.suggested_questions:
+            if st.button(q):
+                follow_up_output = run_pm_agent(q, filename=st.session_state.filename, csv_content=st.session_state.csv_content, follow_up=q)
+                st.markdown(follow_up_output["output"])
+with col2:
+    user_question = st.text_input("Or enter your own question")
+    if user_question:
+        output = run_pm_agent(user_question, filename=st.session_state.filename, csv_content=st.session_state.csv_content, follow_up=user_question)
+        st.markdown(output["output"])
+        
 # Follow-up input
 for i, chat in enumerate(st.session_state.chat_history):
     with st.chat_message("user"):
