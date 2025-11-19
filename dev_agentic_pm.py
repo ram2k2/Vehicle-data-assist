@@ -66,6 +66,11 @@ CSV content (truncated): {csv_content[:1000]}
     }
 
 # 5. Define Agents
+data_preprocessor = simple_agent(
+    "Data Preprocessor Agent",
+    """Parse the uploaded CSV using ';' as delimiter. Clean invalid entries ("NV", "NA", empty)."""
+)
+
 summarizer = simple_agent(
     "Summarizer Agent",
     """You are a summarization agent. Do not generate code or visualizations.
@@ -104,10 +109,14 @@ visualization_agent = simple_agent(
 
 # 6. Build LangGraph
 graph_builder = StateGraph(dict)
-graph_builder.set_entry_point("Chief Agent")
+graph_builder.set_entry_point("Data Preprocessor")
 
-graph_builder.add_node("Chief Agent", chief_agent)
+graph_builder.add_node("Data Preprocessor", data_preprocessor)
+graph_builder.add_edge("Data Preprocessor", "Summarizer")
 graph_builder.add_node("Summarizer", summarizer)
+
+graph_builder.add_edge("Summarizer", "Chief Agent")
+graph_builder.add_node("Chief Agent", chief_agent)
 graph_builder.add_node("Insight Generator", insight_generator)
 graph_builder.add_node("Question Generator", question_generator)
 graph_builder.add_node("Visualization Agent", visualization_agent)
@@ -119,7 +128,6 @@ graph_builder.add_conditional_edges("Chief Agent", lambda state: state["next_age
     "visualization_agent": "Visualization Agent"
 })
 
-graph_builder.add_edge("Summarizer", END)
 graph_builder.add_edge("Insight Generator", END)
 graph_builder.add_edge("Question Generator", END)
 graph_builder.add_edge("Visualization Agent", END)
