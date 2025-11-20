@@ -1,5 +1,5 @@
 import pandas as pd
-from langchain_core.agents import AgentExecutor 
+from langchain.agents import AgentExecutor 
 from langchain.agents.tool_calling_agent import create_tool_calling_agent
 from langchain.tools import Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
