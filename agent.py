@@ -14,9 +14,7 @@ def analyze_csv(file_path: str) -> str:
             return 'No numeric columns found for analysis.'
         top_cols = df[numeric_cols].var().sort_values(ascending=False).head(4).index.tolist()
         summary_lines = [f"{col}: mean={df[col].mean():.2f}, max={df[col].max()}, min={df[col].min()}" for col in top_cols]
-        return 'Summary of top metrics:
-' + '
-'.join(summary_lines)
+        return "Summary of top metrics:\n" + "\n".join(summary_lines)
     except Exception as e:
         return f'Error analyzing CSV: {str(e)}'
 
