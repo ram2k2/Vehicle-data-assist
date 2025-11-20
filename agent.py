@@ -1,14 +1,13 @@
 import pandas as pd
-from langchain.agents import create_tool_calling_agent
-from langchain.agents.agent_executor import AgentExecutor
-from langchain.tools import Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
+from langchain.tools import Tool
+from langchain.schema.runnable import RunnableMap
 
 # CSV Analysis Logic
 def analyze_csv(file_path: str) -> str:
     try:
-        # Auto-detect delimiter (semicolon first, fallback to comma)
+        # Auto-detect delimiter
         try:
             df = pd.read_csv(file_path, sep=';', engine='python')
         except Exception:
@@ -46,14 +45,16 @@ prompt = ChatPromptTemplate.from_messages([
     ("human", "{input}")
 ])
 
-# Create agent using new API
-agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
-agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+# Runnable pipeline for Q&A
+agent_chain = RunnableMap({
+    "input": lambda x: x["input"],
+    "response": prompt | llm
+})
 
 # Handle user query
 def handle_query(user_query: str) -> str:
     try:
-        result = agent_executor.invoke({"input": user_query})
-        return result["output"]
+        result = agent_chain.invoke({"input": user_query})
+        return result["response"].content
     except Exception as e:
         return f"Error: {str(e)}"
