@@ -1,16 +1,9 @@
-# Pinned to force V1 Pydantic compatibility
 pydantic==1.10.13
 langchain==0.2.11
 langgraph==0.1.7
 langchain-google-genai==0.0.11
-# CORRECTED: Use the highest existing 0.7.x version
-google-generativeai==0.7.2 
-
-# Pinned to bypass known source compilation issues on Streamlit Cloud
-pandas==1.5.3 
-numpy==1.23.5
-tenacity==8.2.3
-
-# Stable UI libraries
-plotly==5.24.0
-streamlit==1.39.0
+google-generativeai
+pandas 
+numpy
+plotly
+streamlit
