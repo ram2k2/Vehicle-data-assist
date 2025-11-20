@@ -1,35 +1,36 @@
-from typing import Any
+import pandas as pd
 from pydantic import BaseModel, Field
 from langchain.agents import create_openai_functions_agent, AgentExecutor
 from langchain.tools import Tool
 from langchain.llms import GoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
-import pandas as pd
 
 # CSV Analysis Logic
 def analyze_csv(file_path: str) -> str:
     try:
-        df = pd.read_csv(file_path, sep=None, engine="python")
-        numeric_cols = df.select_dtypes(include="number").columns.tolist()
+        df = pd.read_csv(file_path, sep=';', engine='python')  # Expect semicolon-delimited
+        numeric_cols = df.select_dtypes(include='number').columns.tolist()
         if not numeric_cols:
-            return "No numeric columns found for analysis."
+            return 'No numeric columns found for analysis.'
         top_cols = df[numeric_cols].var().sort_values(ascending=False).head(4).index.tolist()
         summary_lines = [f"{col}: mean={df[col].mean():.2f}, max={df[col].max()}, min={df[col].min()}" for col in top_cols]
-        return "Summary of top metrics:\n" + "\n".join(summary_lines)
+        return 'Summary of top metrics:
+' + '
+'.join(summary_lines)
     except Exception as e:
-        return f"Error analyzing CSV: {str(e)}"
+        return f'Error analyzing CSV: {str(e)}'
 
 # Define schema
 class QueryInput(BaseModel):
-    query: str = Field(..., description="User query for vehicle data insights")
+    query: str = Field(..., description='User query for vehicle data insights')
 
-tools = [Tool(name="CSV Analyzer", func=analyze_csv, description="Analyze uploaded CSV file and return insights")]
+tools = [Tool(name='CSV Analyzer', func=analyze_csv, description='Analyze uploaded CSV file and return insights')]
 
-llm = GoogleGenerativeAI(model="gemini-pro", temperature=0.2)
+llm = GoogleGenerativeAI(model='gemini-pro', temperature=0.2)
 
 prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a professional Vehicle Data Insights Assistant."),
-    ("human", "{input}")
+    ('system', 'You are a professional Vehicle Data Insights Assistant.'),
+    ('human', '{input}')
 ])
 
 agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
@@ -37,7 +38,7 @@ agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 def handle_query(user_query: str) -> str:
     try:
-        result = agent_executor.invoke({"input": user_query})
-        return result["output"]
+        result = agent_executor.invoke({'input': user_query})
+        return result['output']
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f'Error: {str(e)}'
