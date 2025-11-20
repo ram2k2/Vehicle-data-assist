@@ -1,9 +1,10 @@
 pandas==2.2.3
 plotly==5.24.0
-langchain
+langchain==0.2.11 
+langchain-google-genai>=1.1.0
+langgraph==0.1.7
 streamlit
 langgraph
 google-generativeai
-langchain-google-genai>=1.1.0
 
 
