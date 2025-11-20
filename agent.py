@@ -1,16 +1,23 @@
 import pandas as pd
-from langchain.agents import create_openai_functions_agent, AgentExecutor
+from langchain.agents import create_openai_tools_agent, AgentExecutor
 from langchain.tools import Tool
-from langchain.llms import GoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 
 # CSV Analysis Logic
 def analyze_csv(file_path: str) -> str:
     try:
-        df = pd.read_csv(file_path, sep=';', engine='python')  # Expect semicolon-delimited
+        # Auto-detect delimiter (semicolon first, fallback to comma)
+        try:
+            df = pd.read_csv(file_path, sep=';', engine='python')
+        except Exception:
+            df = pd.read_csv(file_path, sep=',', engine='python')
+
         numeric_cols = df.select_dtypes(include='number').columns.tolist()
         if not numeric_cols:
             return "No numeric columns found for analysis."
+
+        # Top 4 metrics by variance
         top_cols = df[numeric_cols].var().sort_values(ascending=False).head(4).index.tolist()
         summary_lines = [
             f"{col}: mean={df[col].mean():.2f}, max={df[col].max()}, min={df[col].min()}"
@@ -21,10 +28,16 @@ def analyze_csv(file_path: str) -> str:
         return f"Error analyzing CSV: {str(e)}"
 
 # Tool for CSV analysis
-tools = [Tool(name="CSV Analyzer", func=analyze_csv, description="Analyze uploaded CSV file and return insights")]
+tools = [
+    Tool(
+        name="CSV Analyzer",
+        func=analyze_csv,
+        description="Analyze uploaded CSV file and return insights"
+    )
+]
 
 # Initialize Gemini LLM
-llm = GoogleGenerativeAI(model="gemini-pro", temperature=0.2)
+llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.2)
 
 # Prompt template
 prompt = ChatPromptTemplate.from_messages([
@@ -32,8 +45,8 @@ prompt = ChatPromptTemplate.from_messages([
     ("human", "{input}")
 ])
 
-# Create agent
-agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
+# Create agent using new API
+agent = create_openai_tools_agent(llm=llm, tools=tools, prompt=prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 # Handle user query
