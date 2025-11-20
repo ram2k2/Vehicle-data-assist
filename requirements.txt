@@ -5,4 +5,4 @@ langgraph==0.1.7
 # MUST use a version that is truly Pydantic V1 compatible (v0.0.x)
 langchain-google-genai
 pydantic==1.10.13
-
+numpy
