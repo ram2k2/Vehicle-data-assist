@@ -3,6 +3,6 @@ streamlit==1.39.0
 langchain==0.2.11
 langgraph==0.1.7
 # MUST use a version that is truly Pydantic V1 compatible (v0.0.x)
-langchain-google-genai==0.0.10
+langchain-google-genai
 pydantic==1.10.13
 
