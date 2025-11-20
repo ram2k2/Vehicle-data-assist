@@ -1,9 +1,9 @@
-pandas==2.2.3
+# Downgrade pandas to a version known to have stable wheels
+pandas==2.0.3
 plotly==5.24.0
 streamlit==1.39.0
+# Pydantic V1 ecosystem (Aligned to your code's PYDANTIC_VERSION = "1")
 langchain==0.2.11
-langchain-google-genai==1.0.10
 langgraph==0.1.7
-google-generativeai==0.3.0
+langchain-google-genai==1.0.10
 pydantic==1.10.13
-typing-extensions==4.12.2
