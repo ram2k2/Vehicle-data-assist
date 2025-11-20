@@ -1,7 +1,4 @@
 import pandas as pd
-from pydantic import BaseModel, Field
-from langchain.agents import initialize_agent, AgentType
-from langchain.tools import Tool
 from langchain.llms import GoogleGenerativeAI
 
 # CSV Analysis Logic
@@ -20,22 +17,13 @@ def analyze_csv(file_path: str) -> str:
     except Exception as e:
         return f"Error analyzing CSV: {str(e)}"
 
-# Define schema (optional for future use)
-class QueryInput(BaseModel):
-    query: str = Field(..., description="User query for vehicle data insights")
-
-# Tools
-tools = [Tool(name="CSV Analyzer", func=analyze_csv, description="Analyze uploaded CSV file and return insights")]
-
-# LLM (Google Gemini)
+# Initialize LLM (Gemini)
 llm = GoogleGenerativeAI(model="gemini-pro", temperature=0.2)
 
-# Initialize agent using old API
-agent = initialize_agent(tools, llm, agent=AgentType.OPENAI_FUNCTIONS, verbose=True)
-
-# Handle user query
+# Simple query handler
 def handle_query(user_query: str) -> str:
     try:
-        return agent.run(user_query)
+        # Direct call to LLM without agent wrapper
+        return llm.invoke(user_query)
     except Exception as e:
         return f"Error: {str(e)}"
