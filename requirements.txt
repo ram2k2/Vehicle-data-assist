@@ -4,7 +4,7 @@ plotly==5.24.0
 streamlit==1.39.0
 langchain==0.2.14
 langgraph==0.1.7
-langchain-google-genai==1.0.12
+langchain-google-genai==0.0.12
 google-generativeai==0.8.3
 pydantic==2.8.2
 tenacity==8.2.3
