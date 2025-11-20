@@ -1,9 +1,8 @@
 import pandas as pd
 from pydantic import BaseModel, Field
-from langchain.agents import create_structured_chat_agent, AgentExecutor
+from langchain.agents import initialize_agent, AgentType
 from langchain.tools import Tool
 from langchain.llms import GoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate
 
 # CSV Analysis Logic
 def analyze_csv(file_path: str) -> str:
@@ -11,32 +10,32 @@ def analyze_csv(file_path: str) -> str:
         df = pd.read_csv(file_path, sep=';', engine='python')  # Expect semicolon-delimited
         numeric_cols = df.select_dtypes(include='number').columns.tolist()
         if not numeric_cols:
-            return 'No numeric columns found for analysis.'
+            return "No numeric columns found for analysis."
         top_cols = df[numeric_cols].var().sort_values(ascending=False).head(4).index.tolist()
-        summary_lines = [f"{col}: mean={df[col].mean():.2f}, max={df[col].max()}, min={df[col].min()}" for col in top_cols]
+        summary_lines = [
+            f"{col}: mean={df[col].mean():.2f}, max={df[col].max()}, min={df[col].min()}"
+            for col in top_cols
+        ]
         return "Summary of top metrics:\n" + "\n".join(summary_lines)
     except Exception as e:
-        return f'Error analyzing CSV: {str(e)}'
+        return f"Error analyzing CSV: {str(e)}"
 
-# Define schema
+# Define schema (optional for future use)
 class QueryInput(BaseModel):
-    query: str = Field(..., description='User query for vehicle data insights')
+    query: str = Field(..., description="User query for vehicle data insights")
 
-tools = [Tool(name='CSV Analyzer', func=analyze_csv, description='Analyze uploaded CSV file and return insights')]
+# Tools
+tools = [Tool(name="CSV Analyzer", func=analyze_csv, description="Analyze uploaded CSV file and return insights")]
 
-llm = GoogleGenerativeAI(model='gemini-pro', temperature=0.2)
+# LLM (Google Gemini)
+llm = GoogleGenerativeAI(model="gemini-pro", temperature=0.2)
 
-prompt = ChatPromptTemplate.from_messages([
-    ('system', 'You are a professional Vehicle Data Insights Assistant.'),
-    ('human', '{input}')
-])
+# Initialize agent using old API
+agent = initialize_agent(tools, llm, agent=AgentType.OPENAI_FUNCTIONS, verbose=True)
 
-agent = create_structured_chat_agent(llm=llm, tools=tools, prompt=prompt)
-agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
-
+# Handle user query
 def handle_query(user_query: str) -> str:
     try:
-        result = agent_executor.invoke({'input': user_query})
-        return result['output']
+        return agent.run(user_query)
     except Exception as e:
-        return f'Error: {str(e)}'
+        return f"Error: {str(e)}"
