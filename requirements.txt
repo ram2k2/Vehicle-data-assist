@@ -5,3 +5,5 @@ google-generativeai
 langchain
 langchain-core
 langchain-google-genai
+plotly==4.14.3
+plotly-express==0.4.0
