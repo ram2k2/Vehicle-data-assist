@@ -1,5 +1,6 @@
 import pandas as pd
-from langchain.agents import create_openai_tools_agent, AgentExecutor
+from langchain.agents import AgentExecutor
+from langchain.agents.tool_calling_agent import create_tool_calling_agent 
 from langchain.tools import Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
@@ -46,7 +47,7 @@ prompt = ChatPromptTemplate.from_messages([
 ])
 
 # Create agent using new API
-agent = create_openai_tools_agent(llm=llm, tools=tools, prompt=prompt)
+agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 # Handle user query
