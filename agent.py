@@ -1,5 +1,6 @@
 # agent.py
 import pandas as pd
+import os
 from langchain.tools import Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import initialize_agent, AgentType
@@ -8,6 +9,7 @@ from langgraph.graph import Graph
 
 def create_agent(df):
     llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+    google_api_key=os.getenv("GEMINI_API_KEY")  # Reads from secrets
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
     def query_csv(query: str) -> str:
