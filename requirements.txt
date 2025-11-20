@@ -2,7 +2,7 @@ streamlit
 pandas
 numpy
 plotly
-langchain>=0.2.14
+langchain
 langchain-google-genai
 google-generativeai
 pydantic
