@@ -1,8 +1,15 @@
-plotly==5.24.0
-streamlit==1.39.0
+# Pinned to force V1 Pydantic compatibility
+pydantic==1.10.13
 langchain==0.2.11
 langgraph==0.1.7
-# MUST use a version that is truly Pydantic V1 compatible (v0.0.x)
-langchain-google-genai
-pydantic==1.10.13
-numpy
+langchain-google-genai==0.0.10
+google-generativeai==0.7.9  # Required by langchain-google-genai 0.0.10
+
+# Pinned to force a stable, non-source-compiled version (Bypasses the "still running" issue)
+pandas==1.5.3 
+numpy==1.23.5 # Pin to an older, highly stable version to maximize wheel availability
+tenacity==8.2.3
+
+# Stable UI libraries
+plotly==5.24.0
+streamlit==1.39.0
