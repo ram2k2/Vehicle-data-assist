@@ -1,6 +1,7 @@
 # agent.py
-import pandas as pd
 import os
+os.environ["PYDANTIC_VERSION"] = "1"
+import pandas as pd
 from langchain_core.tools import Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import initialize_agent, AgentType
