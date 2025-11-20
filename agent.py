@@ -1,8 +1,6 @@
 import pandas as pd
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.tools import Tool
-from langchain.schema.runnable import RunnableMap
+from langchain.schema import HumanMessage, SystemMessage
 
 # CSV Analysis Logic
 def analyze_csv(file_path: str) -> str:
@@ -27,34 +25,17 @@ def analyze_csv(file_path: str) -> str:
     except Exception as e:
         return f"Error analyzing CSV: {str(e)}"
 
-# Tool for CSV analysis
-tools = [
-    Tool(
-        name="CSV Analyzer",
-        func=analyze_csv,
-        description="Analyze uploaded CSV file and return insights"
-    )
-]
-
 # Initialize Gemini LLM
 llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.2)
-
-# Prompt template
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a professional Vehicle Data Insights Assistant."),
-    ("human", "{input}")
-])
-
-# Runnable pipeline for Q&A
-agent_chain = RunnableMap({
-    "input": lambda x: x["input"],
-    "response": prompt | llm
-})
 
 # Handle user query
 def handle_query(user_query: str) -> str:
     try:
-        result = agent_chain.invoke({"input": user_query})
-        return result["response"].content
+        messages = [
+            SystemMessage(content="You are a professional Vehicle Data Insights Assistant."),
+            HumanMessage(content=user_query)
+        ]
+        response = llm.invoke(messages)
+        return response.content
     except Exception as e:
         return f"Error: {str(e)}"
