@@ -5,3 +5,4 @@ langchain-google-genai>=1.1.0
 langgraph==0.1.7
 streamlit
 google-generativeai
+pydantic>=2.0.0
