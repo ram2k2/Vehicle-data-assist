@@ -9,3 +9,5 @@ langchain_community
 langgraph
 google-generativeai
 langchain-google-genai>=1.1.0
+pydantic-core==2.14.6
+
