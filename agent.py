@@ -1,6 +1,6 @@
 import pandas as pd
 from pydantic import BaseModel, Field
-from langchain.agents import create_openai_functions_agent, AgentExecutor
+from langchain.agents import create_structured_chat_agent, AgentExecutor
 from langchain.tools import Tool
 from langchain.llms import GoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
@@ -31,7 +31,7 @@ prompt = ChatPromptTemplate.from_messages([
     ('human', '{input}')
 ])
 
-agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
+agent = create_structured_chat_agent(llm=llm, tools=tools, prompt=prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 def handle_query(user_query: str) -> str:
