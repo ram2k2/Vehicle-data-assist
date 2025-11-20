@@ -1,10 +1,10 @@
-langchain>=0.2.11
-langgraph>=0.1.7
-# Loosen constraints to let the resolver find a compatible pair
+# Allow the resolver to find the latest Pydantic V2-compatible versions
+langchain
+langgraph
 langchain-google-genai
 google-generativeai
 
-# General dependencies (Let pip/uv pick the latest Pydantic V2 versions)
+# General dependencies (Let pip/uv pick the latest)
 pandas
 numpy
 plotly
