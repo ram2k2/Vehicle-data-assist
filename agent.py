@@ -1,7 +1,7 @@
 # agent.py
 import pandas as pd
 import os
-from langchain.tools import Tool
+from langchain_core.tools import Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import initialize_agent, AgentType
 from langchain.memory import ConversationBufferMemory
