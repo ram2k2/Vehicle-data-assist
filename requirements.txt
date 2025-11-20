@@ -2,6 +2,6 @@ streamlit
 langchain_community
 langgraph
 google-generativeai
-langchain>=0.2.0
-langchain-core>=0.2.0
-langchain-google-genai>=1.1.0
+langchain
+langchain-core
+langchain-google-genai
