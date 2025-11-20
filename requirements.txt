@@ -1,7 +1,9 @@
 streamlit
 pandas
 plotly
-langchain
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-google-genai>=0.0.10
+google-generativeai>=0.3.0
+pydantic==1.10.13
 langgraph
-langchain-google-genai
-google-generativeai
