@@ -1,9 +1,7 @@
 streamlit
-pandas
-numpy
-plotly
-langchain>=0.2.14
+langchain>=0.2.0
 langchain-google-genai
-google-generativeai
-pydantic>=2.0
-tenacity
+pandas
+plotly
+matplotlib
+seaborn
