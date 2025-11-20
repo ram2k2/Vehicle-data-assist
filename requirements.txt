@@ -1,11 +1,11 @@
-# Allow the resolver to find the latest Pydantic V2-compatible versions
-langchain
-langgraph
-langchain-google-genai
-google-generativeai
-
-# General dependencies (Let pip/uv pick the latest)
-pandas
-numpy
-plotly
-streamlit
+pandas==2.0.3
+numpy==1.26.4
+plotly==5.24.0
+streamlit==1.39.0
+langchain==0.2.11
+langchain-core==0.2.11
+langgraph==0.1.7
+langchain-google-genai==1.0.12
+google-generativeai==0.8.3
+pydantic==2.8.2
+tenacity==8.2.3
