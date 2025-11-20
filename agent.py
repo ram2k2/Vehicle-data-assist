@@ -1,5 +1,8 @@
 import pandas as pd
+from langchain.agents import create_openai_functions_agent, AgentExecutor
+from langchain.tools import Tool
 from langchain.llms import GoogleGenerativeAI
+from langchain.prompts import ChatPromptTemplate
 
 # CSV Analysis Logic
 def analyze_csv(file_path: str) -> str:
@@ -17,13 +20,26 @@ def analyze_csv(file_path: str) -> str:
     except Exception as e:
         return f"Error analyzing CSV: {str(e)}"
 
-# Initialize LLM (Gemini)
+# Tool for CSV analysis
+tools = [Tool(name="CSV Analyzer", func=analyze_csv, description="Analyze uploaded CSV file and return insights")]
+
+# Initialize Gemini LLM
 llm = GoogleGenerativeAI(model="gemini-pro", temperature=0.2)
 
-# Simple query handler
+# Prompt template
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a professional Vehicle Data Insights Assistant."),
+    ("human", "{input}")
+])
+
+# Create agent
+agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+# Handle user query
 def handle_query(user_query: str) -> str:
     try:
-        # Direct call to LLM without agent wrapper
-        return llm.invoke(user_query)
+        result = agent_executor.invoke({"input": user_query})
+        return result["output"]
     except Exception as e:
         return f"Error: {str(e)}"
